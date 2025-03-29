@@ -111,6 +111,21 @@ def main():
                 
                 updater.job_queue.run_repeating(log_uptime_job, interval=3600, first=3600)  # Log uptime every hour
                 
+                # Schedule automatic cleanup of old messages in group chats (once per day)
+                def auto_cleanup_job(context):
+                    logger.info("Running scheduled auto-cleanup task")
+                    try:
+                        from auto_cleanup import clean_old_messages
+                        clean_old_messages(TELEGRAM_TOKEN, days_old=7)
+                        logger.info("Scheduled auto-cleanup completed successfully")
+                    except Exception as e:
+                        logger.error(f"Scheduled auto-cleanup failed: {e}")
+                
+                # Run once a day at 3:00 AM UTC
+                from datetime import time as datetime_time
+                cleanup_time = datetime_time(hour=3, minute=0)
+                updater.job_queue.run_daily(auto_cleanup_job, time=cleanup_time)
+                
                 # Reset restart counter after successful start
                 restart_count = 0
                 

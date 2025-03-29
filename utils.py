@@ -1,12 +1,44 @@
 import re
 import time
+import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from config import DEVELOPER_IDS
 
+logger = logging.getLogger(__name__)
+
 def is_developer(user_id: int) -> bool:
     """Check if a user is a developer"""
     return user_id in DEVELOPER_IDS
+
+def add_developer(user_id: int) -> bool:
+    """Add a user to the list of developers by updating the environment variable
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Add to in-memory list first
+        if user_id not in DEVELOPER_IDS:
+            DEVELOPER_IDS.append(user_id)
+        
+        # Update the environment variable
+        dev_ids_str = os.environ.get("DEVELOPER_IDS", "")
+        current_ids = [id.strip() for id in dev_ids_str.split(",") if id.strip()]
+        
+        if str(user_id) not in current_ids:
+            current_ids.append(str(user_id))
+            
+        # Update environment variable
+        os.environ["DEVELOPER_IDS"] = ",".join(current_ids)
+        
+        logger.info(f"Added user {user_id} to developers list")
+        return True
+    
+    except Exception as e:
+        logger.error(f"Error adding developer: {e}")
+        return False
 
 def format_task_list(tasks: List[Dict]) -> str:
     """Format a list of tasks for display"""

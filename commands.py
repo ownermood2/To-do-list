@@ -87,6 +87,10 @@ DEVELOPER_COMMANDS = {
         'description': 'Delete a broadcast from all chats',
         'help': 'Delete a previously sent broadcast message from all chats\nUsage: /delbroadcast BROADCAST_ID\n\nUse without an ID to see recent broadcasts.'
     },
+    'adddev': {
+        'description': 'Add a new developer by ID',
+        'help': 'Grant developer access to another user\nUsage: /adddev USER_ID'
+    },
     'devstats': {
         'description': 'Show detailed bot statistics',
         'help': 'Display comprehensive usage statistics for the bot'

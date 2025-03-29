@@ -34,18 +34,22 @@ from database import (
     update_chat_data,
     iso_now
 )
+from utils import (
+    is_developer,
+    add_developer,
+    format_task_list,
+    parse_time,
+    format_task_details,
+    get_current_time
+)
+
 from keyboards import (
     get_task_list_keyboard,
     get_settings_keyboard,
     get_confirmation_keyboard,
     get_time_selection_keyboard
 )
-from utils import (
-    is_developer,
-    format_task_list,
-    parse_time,
-    get_current_time
-)
+
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +389,10 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
     data = query.data
     chat_id = update.effective_chat.id
     
+    # Import chat types
+    from config import CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP
+    user_id = update.callback_query.from_user.id
+    
     # Acknowledge the button press
     query.answer()
     
@@ -708,6 +716,259 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
                 "❌ There was an error clearing your completed tasks. Please try again later.",
                 parse_mode=ParseMode.MARKDOWN
             )
+            
+    # Broadcast deletion related callbacks
+    elif data.startswith("delbroadcast:"):
+        # Only developers can delete broadcasts
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can delete broadcasts.")
+            return
+            
+        broadcast_id = data.split(":", 1)[1]
+        
+        # Check if broadcast exists
+        if 'broadcasts' not in context.bot_data or broadcast_id not in context.bot_data['broadcasts']:
+            query.edit_message_text(f"❌ Broadcast with ID {broadcast_id} not found.")
+            return
+            
+        broadcast = context.bot_data['broadcasts'][broadcast_id]
+        sent_messages = broadcast.get('sent_messages', [])
+        message_preview = broadcast['message'][:100] + "..." if len(broadcast['message']) > 100 else broadcast['message']
+        
+        # Ask for confirmation
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Yes, delete all", callback_data=f"confirm_delbroadcast:{broadcast_id}"),
+                InlineKeyboardButton("❌ No, cancel", callback_data="cancel_delbroadcast")
+            ]
+        ]
+        
+        query.edit_message_text(
+            f"🗑️ *Delete Broadcast Confirmation*\n\n"
+            f"You are about to delete this broadcast from {len(sent_messages)} chats:\n\n"
+            f"Message: {message_preview}\n\n"
+            f"Are you sure you want to proceed?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data.startswith("viewbroadcast:"):
+        # Only developers can view broadcasts
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can view broadcast details.")
+            return
+            
+        broadcast_id = data.split(":", 1)[1]
+        
+        # Check if broadcast exists
+        if 'broadcasts' not in context.bot_data or broadcast_id not in context.bot_data['broadcasts']:
+            query.edit_message_text(f"❌ Broadcast with ID {broadcast_id} not found.")
+            return
+            
+        broadcast = context.bot_data['broadcasts'][broadcast_id]
+        sent_messages = broadcast.get('sent_messages', [])
+        
+        # Create a list of chats where the message was sent
+        chat_list = ""
+        for i, msg in enumerate(sent_messages[:10]):  # Show only the first 10
+            try:
+                chat_id = msg['chat_id']
+                chat_info = context.bot.get_chat(chat_id)
+                if chat_info.username:
+                    chat_name = f"@{chat_info.username}"
+                else:
+                    chat_name = chat_info.title or f"Chat {chat_id}"
+                    
+                chat_list += f"• {chat_name}\n"
+            except Exception:
+                chat_list += f"• Chat {chat_id}\n"
+                
+        if len(sent_messages) > 10:
+            chat_list += f"... and {len(sent_messages) - 10} more\n"
+            
+        if not chat_list:
+            chat_list = "No chats found."
+            
+        # Create keyboard to go back or delete
+        keyboard = [
+            [
+                InlineKeyboardButton("🗑️ Delete Broadcast", callback_data=f"delbroadcast:{broadcast_id}"),
+                InlineKeyboardButton("◀️ Back", callback_data="back_to_broadcasts")
+            ]
+        ]
+        
+        query.edit_message_text(
+            f"📢 *Broadcast Details*\n\n"
+            f"🆔 ID: `{broadcast_id}`\n"
+            f"⏰ Time: {broadcast.get('timestamp', 'Unknown')}\n"
+            f"📨 Sent to: {len(sent_messages)} chats\n\n"
+            f"📝 *Message:*\n{broadcast['message']}\n\n"
+            f"📋 *Sent to chats:*\n{chat_list}",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "back_to_broadcasts":
+        # Go back to broadcast list
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can view broadcasts.")
+            return
+            
+        query.edit_message_text(
+            "Please use /delbroadcast to see the list of recent broadcasts.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data.startswith("confirm_delbroadcast:"):
+        # Process broadcast deletion confirmation
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can delete broadcasts.")
+            return
+            
+        broadcast_id = data.split(":", 1)[1]
+        
+        # Check if broadcast exists
+        if 'broadcasts' not in context.bot_data or broadcast_id not in context.bot_data['broadcasts']:
+            query.edit_message_text(f"❌ Broadcast with ID {broadcast_id} not found.")
+            return
+            
+        broadcast = context.bot_data['broadcasts'][broadcast_id]
+        sent_messages = broadcast.get('sent_messages', [])
+        
+        # Send a status message first
+        query.edit_message_text(
+            f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
+            f"Deleted: 0\nFailed: 0",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        deleted_count = 0
+        failed_count = 0
+        
+        # Delete each message
+        for msg in sent_messages:
+            try:
+                context.bot.delete_message(
+                    chat_id=msg['chat_id'],
+                    message_id=msg['message_id']
+                )
+                deleted_count += 1
+                
+                # Update status every 10 deletions
+                if deleted_count % 10 == 0:
+                    query.edit_message_text(
+                        f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
+                        f"Deleted: {deleted_count}\nFailed: {failed_count}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    
+                # Add a small delay to avoid hitting rate limits
+                time.sleep(0.1)
+                
+            except Exception as e:
+                logger.error(f"Failed to delete message from {msg['chat_id']}: {e}")
+                failed_count += 1
+        
+        # Remove the broadcast from bot_data
+        del context.bot_data['broadcasts'][broadcast_id]
+        
+        # Final status update
+        query.edit_message_text(
+            f"🗑️ Broadcast deletion complete!\n"
+            f"Deleted: {deleted_count}\nFailed: {failed_count}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "cancel_delbroadcast":
+        # User cancelled broadcast deletion
+        query.edit_message_text(
+            "⏹️ Broadcast deletion cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "group_help":
+        # Display helpful information for groups
+        group_commands = [
+            "*/add* - Create a new task for the group",
+            "*/list* - View all active group tasks",
+            "*/done* - Mark a task as completed",
+            "*/delete* - Remove a task from the list",
+            "*/remind* - Set a reminder for a task",
+            "*/today* - View tasks due today",
+            "*/priority* - Set task priority (high/medium/low)",
+            "*/tag* - Add a category to a task",
+            "*/clean* - Clean up bot messages in the chat"
+        ]
+        
+        # Create a help message with basic commands
+        help_text = "📚 *Group Commands*\n\n" + "\n".join(group_commands) + "\n\n"
+        help_text += "To mention the entire group in reminders, use `/remind` with any task."
+        
+        # Add a keyboard with the most useful commands
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Add Task", callback_data="show_add_format"),
+                InlineKeyboardButton("📋 List Tasks", callback_data="show_list_format")
+            ],
+            [
+                InlineKeyboardButton("⏰ Set Reminder", callback_data="show_remind_format"),
+                InlineKeyboardButton("🧹 Clean Chat", callback_data="show_clean_format")
+            ]
+        ]
+        
+        query.edit_message_text(
+            help_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "show_add_format":
+        # Show the format for adding tasks
+        query.edit_message_text(
+            "➕ *Adding Tasks*\n\n"
+            "Use `/add` followed by your task description:\n"
+            "`/add Buy snacks for the meeting`\n\n"
+            "You can also add tasks with due dates:\n"
+            "`/add Submit report due:friday`\n\n"
+            "Or with priorities:\n"
+            "`/add Call client priority:high`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "show_list_format":
+        # Show the format for listing tasks
+        query.edit_message_text(
+            "📋 *Listing Tasks*\n\n"
+            "Use `/list` to view all active tasks\n"
+            "Use `/today` to see tasks due today\n"
+            "Use `/list done` to see completed tasks\n\n"
+            "From the list view, you can mark tasks as done, delete them, or set reminders with the inline buttons.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "show_remind_format":
+        # Show the format for setting reminders
+        query.edit_message_text(
+            "⏰ *Setting Reminders*\n\n"
+            "Use `/remind` followed by the task number and time:\n"
+            "`/remind 1 30m` (30 minutes)\n"
+            "`/remind 2 2h` (2 hours)\n"
+            "`/remind 3 tomorrow 9am`\n\n"
+            "Or use `/list` and click the ⏰ button next to any task.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "show_clean_format":
+        # Show the format for cleaning chat
+        query.edit_message_text(
+            "🧹 *Cleaning Chat*\n\n"
+            "Use `/clean` to remove bot messages and keep the chat tidy.\n\n"
+            "Options:\n"
+            "• Clean bot messages: Removes recent bot responses\n"
+            "• Clean all tasks: Clears the task list (requires confirmation)\n\n"
+            "This helps keep your group chat organized and focused.",
+            parse_mode=ParseMode.MARKDOWN
+        )
         
     elif data.startswith("time:"):
         # Set reminder with predefined time
@@ -1846,14 +2107,36 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             parse_mode=ParseMode.MARKDOWN
         )
     elif is_group and len(message_text) > 3 and not message_text.startswith('/'):
-        # In groups, just provide information about using commands for tasks
-        # Only respond occasionally to avoid being too chatty
-        import random
-        if random.random() < 0.1:  # Only respond 10% of the time to avoid spam
+        # In groups, we don't automatically add tasks from regular messages
+        
+        # Check if the bot was mentioned
+        mentioned = False
+        if update.message.entities:
+            for entity in update.message.entities:
+                if entity.type == "mention":
+                    mention_text = message_text[entity.offset:entity.offset+entity.length]
+                    if mention_text.lower() == f"@{context.bot.username.lower()}":
+                        mentioned = True
+                        break
+        
+        if mentioned:
+            # Bot was mentioned, provide helpful information
+            keyboard = [
+                [
+                    InlineKeyboardButton("📚 View Commands", callback_data="group_help"),
+                    InlineKeyboardButton("➕ Add Task", callback_data=f"add_task:{message_text[:200]}")
+                ]
+            ]
+            
             update.message.reply_text(
-                "🔹 To add tasks, use commands like */add*, */list* or */help*.",
+                "👋 Hi! I'm TaskMaster Pro, your task management assistant.\n\n"
+                "To add a task, use `/add Task description` or click the Add Task button below.\n"
+                "To see all commands, use `/help` or click View Commands.",
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
             )
+        
+        # We don't respond to regular messages that don't mention the bot
         return
 
 def get_message(update: Update):
@@ -2251,6 +2534,43 @@ def debug_handler(update: Update, context: CallbackContext) -> None:
     
     update.message.reply_text(debug_text, parse_mode=ParseMode.MARKDOWN)
     
+def adddev_handler(update: Update, context: CallbackContext) -> None:
+    """Handle the /adddev command - add a new developer (developer only)"""
+    # Only existing developers can add new developers
+    if not is_developer(update.effective_user.id):
+        update.message.reply_text("❌ You don't have permission to use this command.")
+        return
+    
+    # Check if user ID is provided
+    if not context.args:
+        update.message.reply_text(
+            "Please provide a user ID to add as a developer.\n"
+            "Usage: `/adddev 123456789`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    try:
+        # Parse the user ID
+        new_dev_id = int(context.args[0])
+        
+        # Attempt to add the user as a developer
+        if add_developer(new_dev_id):
+            update.message.reply_text(
+                f"✅ Successfully added user {new_dev_id} as a developer.\n"
+                "They now have access to all developer commands.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.info(f"User {update.effective_user.id} added {new_dev_id} as a developer")
+        else:
+            update.message.reply_text(
+                "❌ Failed to add the user as a developer. Please check the logs."
+            )
+    except ValueError:
+        update.message.reply_text(
+            "❌ Invalid user ID format. Please provide a numeric user ID."
+        )
+
 def delete_broadcast_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /delbroadcast command - delete a broadcast message from all chats (developer only)"""
     user_id = update.effective_user.id
@@ -2280,15 +2600,26 @@ def delete_broadcast_handler(update: Update, context: CallbackContext) -> None:
                 except:
                     formatted_time = timestamp
                 
-                recent_broadcasts.append(f"ID: `{broadcast_id}`\nTime: {formatted_time}\nSent to: {sent_count} chats\nMessage: {message_preview}")
+                # Create keyboard buttons for each broadcast
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🗑️ Delete", callback_data=f"delbroadcast:{broadcast_id}"),
+                        InlineKeyboardButton("📝 View Details", callback_data=f"viewbroadcast:{broadcast_id}")
+                    ]
+                ]
+                
+                # Send information for each broadcast with inline buttons
+                update.message.reply_text(
+                    f"*Broadcast Details*\n\n"
+                    f"🆔 ID: `{broadcast_id}`\n"
+                    f"⏰ Time: {formatted_time}\n"
+                    f"📨 Sent to: {sent_count} chats\n"
+                    f"📝 Message: {message_preview}",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
             
-        if recent_broadcasts:
-            update.message.reply_text(
-                "Please provide a broadcast ID to delete.\n\n"
-                "Usage: `/delbroadcast BROADCAST_ID`\n\n"
-                "Recent broadcasts:\n\n" + "\n\n".join(recent_broadcasts),
-                parse_mode=ParseMode.MARKDOWN
-            )
+            return
         else:
             update.message.reply_text(
                 "Please provide a broadcast ID to delete.\n\n"
@@ -2306,44 +2637,21 @@ def delete_broadcast_handler(update: Update, context: CallbackContext) -> None:
     
     broadcast = context.bot_data['broadcasts'][broadcast_id]
     sent_messages = broadcast.get('sent_messages', [])
+    message_preview = broadcast['message'][:100] + "..." if len(broadcast['message']) > 100 else broadcast['message']
     
-    # Send a status message first
-    status_message = update.message.reply_text(
-        f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
-        f"Deleted: 0\nFailed: 0"
-    )
+    # Ask for confirmation before deletion with Yes/No buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes, delete all", callback_data=f"confirm_delbroadcast:{broadcast_id}"),
+            InlineKeyboardButton("❌ No, cancel", callback_data="cancel_delbroadcast")
+        ]
+    ]
     
-    deleted_count = 0
-    failed_count = 0
-    
-    # Delete each message
-    for msg in sent_messages:
-        try:
-            context.bot.delete_message(
-                chat_id=msg['chat_id'],
-                message_id=msg['message_id']
-            )
-            deleted_count += 1
-            
-            # Update status every 10 deletions
-            if deleted_count % 10 == 0:
-                status_message.edit_text(
-                    f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
-                    f"Deleted: {deleted_count}\nFailed: {failed_count}"
-                )
-                
-            # Add a small delay to avoid hitting rate limits
-            time.sleep(0.1)
-            
-        except Exception as e:
-            logger.error(f"Failed to delete message from {msg['chat_id']}: {e}")
-            failed_count += 1
-    
-    # Remove the broadcast from bot_data
-    del context.bot_data['broadcasts'][broadcast_id]
-    
-    # Final status update
-    status_message.edit_text(
-        f"🗑️ Broadcast deletion complete!\n"
-        f"Deleted: {deleted_count}\nFailed: {failed_count}"
+    update.message.reply_text(
+        f"🗑️ *Delete Broadcast Confirmation*\n\n"
+        f"You are about to delete this broadcast from {len(sent_messages)} chats:\n\n"
+        f"Message: {message_preview}\n\n"
+        f"Are you sure you want to proceed?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.MARKDOWN
     )

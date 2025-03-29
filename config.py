@@ -149,3 +149,9 @@ DATA_FILE = "todo_data.json"
 
 # Reminder check interval (in seconds)
 REMINDER_CHECK_INTERVAL = 60
+
+# Chat type constants
+CHAT_TYPE_USER = "private"
+CHAT_TYPE_GROUP = "group"
+CHAT_TYPE_SUPERGROUP = "supergroup"
+CHAT_TYPE_CHANNEL = "channel"

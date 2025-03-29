@@ -16,7 +16,7 @@ try:
         Filters,
         CallbackContext
     )
-    from telegram import BotCommand, Update
+    from telegram import BotCommand, Update, InlineKeyboardButton, InlineKeyboardMarkup
     from telegram.error import (TelegramError, Unauthorized, BadRequest,
                                TimedOut, ChatMigrated, NetworkError)
 except ImportError:
@@ -36,7 +36,7 @@ except ImportError:
             Filters,
             CallbackContext
         )
-        from telegram import BotCommand, Update
+        from telegram import BotCommand, Update, InlineKeyboardButton, InlineKeyboardMarkup
         from telegram.error import (TelegramError, Unauthorized, BadRequest,
                                    TimedOut, ChatMigrated, NetworkError)
         logging.info("Successfully installed and imported python-telegram-bot v13.7")
@@ -68,6 +68,7 @@ from handlers import (
     broadcast_handler,
     groupcast_handler,
     delete_broadcast_handler,
+    adddev_handler,
     stats_handler,
     maintenance_handler,
     debug_handler
@@ -213,6 +214,7 @@ def create_bot():
             'broadcast': broadcast_handler,
             'groupcast': groupcast_handler,
             'delbroadcast': delete_broadcast_handler,
+            'adddev': adddev_handler,
             'devstats': stats_handler,
             'maintenance': maintenance_handler,
             'debug': debug_handler,
@@ -248,6 +250,7 @@ def create_bot():
         dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))
         dispatcher.add_handler(CommandHandler("groupcast", groupcast_handler))
         dispatcher.add_handler(CommandHandler("delbroadcast", delete_broadcast_handler))
+        dispatcher.add_handler(CommandHandler("adddev", adddev_handler))
         dispatcher.add_handler(CommandHandler("devstats", stats_handler))
         dispatcher.add_handler(CommandHandler("maintenance", maintenance_handler))
         dispatcher.add_handler(CommandHandler("debug", debug_handler))
@@ -257,6 +260,70 @@ def create_bot():
     
     # Add callback query handler for inline buttons (always needed)
     dispatcher.add_handler(CallbackQueryHandler(button_callback_handler))
+    
+    # Add a handler for new group members (including the bot itself)
+    def new_chat_members_handler(update: Update, context: CallbackContext) -> None:
+        """Handle new chat members (including when bot is added to a group)"""
+        # Check if the bot itself was added to the group
+        if update.message.new_chat_members:
+            for member in update.message.new_chat_members:
+                if member.id == context.bot.id:
+                    # Bot was added to the group, send an introduction
+                    chat_id = update.effective_chat.id
+                    chat_title = update.effective_chat.title
+                    
+                    # Update chat type in database
+                    from database import update_chat_type
+                    update_chat_type(chat_id, update.effective_chat.type)
+                    
+                    # Log the event
+                    logger.info(f"Bot was added to group: {chat_title} (ID: {chat_id})")
+                    
+                    # Send welcome message with information about the bot
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("📚 View Commands", callback_data="group_help"),
+                            InlineKeyboardButton("➕ Add Task", callback_data="show_add_format")
+                        ]
+                    ]
+                    
+                    context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            f"👋 *Hello everyone in {chat_title}!*\n\n"
+                            f"I'm *TaskMaster Pro*, your group's task management assistant. "
+                            f"I can help you:\n\n"
+                            f"• Create and manage tasks for the group\n"
+                            f"• Send reminders about upcoming deadlines\n"
+                            f"• Keep track of who's done what\n"
+                            f"• Organize tasks by priority and category\n\n"
+                            f"To get started, use the `/add` command to create your first task, "
+                            f"or tap the buttons below to learn more!"
+                        ),
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode="Markdown"
+                    )
+                    
+                    # Wait a moment before sending a second message with quick tips
+                    import time
+                    time.sleep(1)
+                    
+                    context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "🔍 *Quick Tips:*\n\n"
+                            "• `/add Buy snacks for meeting` - Creates a new task\n"
+                            "• `/list` - Shows all active tasks\n"
+                            "• `/help` - Shows all available commands\n"
+                            "• `/clean` - Removes bot messages to keep chat tidy\n\n"
+                            "I'll only respond to commands, not regular messages, "
+                            "so I won't clutter your group chat!"
+                        ),
+                        parse_mode="Markdown"
+                    )
+    
+    # Add handler for new members
+    dispatcher.add_handler(MessageHandler(Filters.status_update.new_chat_members, new_chat_members_handler))
     
     # Add general message handler (always needed)
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, text_message_handler))
