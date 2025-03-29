@@ -1,10 +1,35 @@
 import os
+import sys
+import logging
+
+# Bot version and info
+BOT_NAME = "TaskMaster Pro"
+VERSION = "1.2.0"
+REPOSITORY_URL = "https://github.com/ownermood2/To-do-list.git"
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("config")
 
 # Bot token from environment variables
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+if not TELEGRAM_TOKEN:
+    logger.warning("TELEGRAM_TOKEN not found in environment variables!")
 
 # Developer user IDs (for admin commands)
-DEVELOPER_IDS = [int(id) for id in os.environ.get("DEVELOPER_IDS", "").split(",") if id]
+try:
+    DEVELOPER_IDS = [int(id.strip()) for id in os.environ.get("DEVELOPER_IDS", "").split(",") if id.strip()]
+    if not DEVELOPER_IDS:
+        logger.warning("No developer IDs found in DEVELOPER_IDS environment variable!")
+except Exception as e:
+    logger.error(f"Error parsing DEVELOPER_IDS: {e}")
+    DEVELOPER_IDS = []
 
 # Commands
 COMMANDS = {

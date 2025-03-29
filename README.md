@@ -1,6 +1,6 @@
 # TaskMaster Pro - Telegram Task Management Bot
 
-A powerful Telegram bot designed for comprehensive task management, supporting both individual and collaborative productivity workflows.
+A powerful Telegram bot designed for comprehensive task management, supporting both individual and collaborative productivity workflows. Built for professional use with 24/7 uptime and exceptional reliability.
 
 ## Features
 
@@ -12,6 +12,9 @@ A powerful Telegram bot designed for comprehensive task management, supporting b
 - **Categories & Tags**: Organize tasks with custom categories and tags
 - **Priority Levels**: Set task importance with priority flags
 - **Chat Cleaning**: Keep conversations tidy with the /clean command
+- **Automatic Group Joining**: Bot can join groups when provided with invitation links
+- **24/7 Operation**: Persistent running with automatic recovery from crashes
+- **Web Dashboard**: Monitor bot status and statistics via web interface
 
 ## Commands
 
@@ -34,9 +37,26 @@ A powerful Telegram bot designed for comprehensive task management, supporting b
 ## Setup
 
 1. Clone this repository
-2. Install the required dependencies: `pip install -r requirements.txt`
+2. Run the setup script to install all dependencies: `./setup_environment.sh`
 3. Set up your Telegram bot token in environment variables
-4. Run the bot: `python main.py`
+4. Start the bot using one of the following methods:
+   - For development: `python main.py`
+   - For 24/7 operation: `./run_forever.py`
+   - For server deployment: `./deploy.sh start`
+
+## Installation in Production
+
+For deploying in a production environment:
+
+1. Ensure Python 3.7+ is installed
+2. Clone the repository
+3. Run `./setup_environment.sh` to install dependencies
+4. Create environment variables for `TELEGRAM_TOKEN` and optionally `DEVELOPER_IDS`
+5. Use the deployment script: `./deploy.sh start`
+6. Monitor the status: `./deploy.sh status`
+7. View logs: `./deploy.sh logs`
+
+The bot features automatic recovery from crashes and will maintain 24/7 operation.
 
 ## Environment Variables
 

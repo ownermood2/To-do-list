@@ -45,7 +45,8 @@
         "progress": 0,
         "attachments": [],
         "updated_at": "2025-03-29T14:00:44.117465",
-        "reminder": 1743260445.7171466
+        "reminder": 1743260445.7171466,
+        "reminded": true
       },
       {
         "text": "Ready For the Quiz At 8:30pm [@Quiz_CV]",

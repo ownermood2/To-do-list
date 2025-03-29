@@ -1,14 +1,48 @@
 import logging
 import time
-from telegram.ext import (
-    Updater,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    Filters,
-    CallbackContext
-)
-from telegram import BotCommand, Update
+import os
+import signal
+import sys
+import subprocess
+from datetime import datetime
+
+# Ensure we have the right python-telegram-bot version
+try:
+    from telegram.ext import (
+        Updater,
+        CommandHandler,
+        MessageHandler,
+        CallbackQueryHandler,
+        Filters,
+        CallbackContext
+    )
+    from telegram import BotCommand, Update
+    from telegram.error import (TelegramError, Unauthorized, BadRequest,
+                               TimedOut, ChatMigrated, NetworkError)
+except ImportError:
+    logging.warning("Required telegram modules not found or incorrect version.")
+    logging.info("Installing python-telegram-bot v13.7...")
+    try:
+        # Uninstall any existing version
+        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "python-telegram-bot"])
+        # Install the specific version
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "python-telegram-bot==13.7"])
+        # Now import again
+        from telegram.ext import (
+            Updater,
+            CommandHandler,
+            MessageHandler,
+            CallbackQueryHandler,
+            Filters,
+            CallbackContext
+        )
+        from telegram import BotCommand, Update
+        from telegram.error import (TelegramError, Unauthorized, BadRequest,
+                                   TimedOut, ChatMigrated, NetworkError)
+        logging.info("Successfully installed and imported python-telegram-bot v13.7")
+    except Exception as e:
+        logging.error(f"Failed to install python-telegram-bot: {e}")
+        raise
 from config import TELEGRAM_TOKEN, COMMANDS, DEVELOPER_COMMANDS, REMINDER_CHECK_INTERVAL
 from handlers import (
     start_handler,
@@ -38,7 +72,37 @@ from handlers import (
 )
 from database import initialize_database, save_data
 
+# Set up more detailed logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
+)
+
 logger = logging.getLogger(__name__)
+
+# Track bot uptime
+BOT_START_TIME = datetime.now()
+
+# Signal handler for graceful shutdown
+def signal_handler(sig, frame):
+    logger.info("Received shutdown signal, saving data and exiting gracefully...")
+    # Perform any necessary cleanup
+    try:
+        save_data()
+        logger.info("Data saved successfully")
+    except Exception as e:
+        logger.error(f"Error saving data during shutdown: {e}")
+    
+    logger.info(f"Bot shutting down, uptime: {datetime.now() - BOT_START_TIME}")
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 def check_reminders(context: CallbackContext):
     """Check for due reminders and send notifications"""
