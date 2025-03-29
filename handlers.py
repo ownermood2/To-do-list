@@ -1496,10 +1496,22 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             
             query.edit_message_text(
                 f"⏰ *Custom Reminder*\n\nPlease reply with the time for your reminder for:\n*{task_text}*\n\n"
-                f"Examples:\n"
+                f"*Examples:*\n"
+                f"*Relative Time:*\n"
                 f"• `1h 30m` (1 hour and 30 minutes)\n"
+                f"• `3 hours 45 minutes` (3 hours and 45 minutes)\n"
+                f"• `2:30` (2 hours and 30 minutes)\n\n"
+                f"*Days & Times:*\n"
+                f"• `today 3pm` (today at 3:00 PM)\n"
                 f"• `tomorrow 9am` (tomorrow at 9:00 AM)\n"
                 f"• `friday 3pm` (next Friday at 3:00 PM)\n\n"
+                f"*Specific Dates:*\n"
+                f"• `apr 15` (April 15th this year)\n"
+                f"• `5/20` (May 20th this year)\n"
+                f"• `12-25 8am` (December 25th at 8:00 AM)\n\n"
+                f"*Times Only:*\n"
+                f"• `3pm` (today at 3:00 PM, or tomorrow if already past)\n"
+                f"• `21:30` (9:30 PM today or tomorrow)\n\n"
                 f"Type `cancel` to cancel.",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -2544,10 +2556,18 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             else:
                 # Could not parse the time string
                 update.message.reply_text(
-                    "⚠️ I couldn't understand that time format. Please try again with a format like:\n"
+                    "⚠️ I couldn't understand that time format. Please try one of these formats:\n\n"
+                    "*Relative Time:*\n"
                     "• `1h 30m` (1 hour and 30 minutes)\n"
+                    "• `3 hours 45 minutes` (3 hours and 45 minutes)\n"
+                    "• `2:30` (2 hours and 30 minutes)\n\n"
+                    "*Days & Times:*\n"
+                    "• `today 3pm` (today at 3:00 PM)\n"
                     "• `tomorrow 9am` (tomorrow at 9:00 AM)\n"
-                    "• `friday 3pm` (next Friday at 3:00 PM)",
+                    "• `friday 3pm` (next Friday at 3:00 PM)\n\n"
+                    "*Specific Dates:*\n"
+                    "• `apr 15` (April 15th this year)\n"
+                    "• `5/20` (May 20th this year)",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return

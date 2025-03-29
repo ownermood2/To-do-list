@@ -6,7 +6,7 @@ A powerful Telegram bot designed for comprehensive task management, supporting b
 
 - **Task Management**: Create, list, complete, and delete tasks
 - **Advanced Filtering**: View tasks by priority, category, due date (/today, /week)
-- **Reminders**: Set automated reminders for your tasks
+- **Smart Reminders**: Set automated reminders with flexible time formats
 - **Group Support**: Collaborative task management in group chats
 - **Interactive Interface**: User-friendly command system with inline buttons
 - **Categories & Tags**: Organize tasks with custom categories and tags
@@ -15,6 +15,17 @@ A powerful Telegram bot designed for comprehensive task management, supporting b
 - **Automatic Group Joining**: Bot can join groups when provided with invitation links
 - **24/7 Operation**: Persistent running with automatic recovery from crashes
 - **Web Dashboard**: Monitor bot status and statistics via web interface
+
+## Enhanced Time Format Support
+
+TaskMaster Pro now supports a wide variety of time and date formats for setting reminders! You can use:
+
+- Relative times: `1h 30m`, `2 hours 15 minutes`, `1:30`
+- Days with times: `today 3pm`, `tomorrow 9am`, `friday 15:00`
+- Specific dates: `4/20`, `apr 15`, `12-25 9am`
+- Time of day: `3pm`, `15:00`, `9h30`
+
+For a complete guide to all supported formats, see [TIME_FORMAT_GUIDE.md](TIME_FORMAT_GUIDE.md).
 
 ## Auto-Cleanup Feature
 
