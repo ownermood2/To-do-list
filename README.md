@@ -11,10 +11,30 @@ A powerful Telegram bot designed for comprehensive task management, supporting b
 - **Interactive Interface**: User-friendly command system with inline buttons
 - **Categories & Tags**: Organize tasks with custom categories and tags
 - **Priority Levels**: Set task importance with priority flags
-- **Chat Cleaning**: Keep conversations tidy with the /clean command
+- **Chat Cleaning**: Keep conversations tidy with the /clean command and automatic cleanup feature
 - **Automatic Group Joining**: Bot can join groups when provided with invitation links
 - **24/7 Operation**: Persistent running with automatic recovery from crashes
 - **Web Dashboard**: Monitor bot status and statistics via web interface
+
+## Auto-Cleanup Feature
+
+TaskMaster Pro includes an intelligent auto-cleanup system that automatically removes old bot messages from group chats to keep conversations tidy. This feature:
+
+- Runs automatically once per day (at 3:00 AM UTC)
+- Can be customized per chat through the `/settings` menu
+- Allows setting different retention periods (3, 7, 14, or 30 days)
+- Can be disabled completely for specific chats
+- Respects chat-specific preferences
+
+To manually test the auto-cleanup functionality, use the included script:
+```
+./run_cleanup.sh
+```
+
+You can also specify a custom default retention period:
+```
+./run_cleanup.sh --days 14
+```
 
 ## Commands
 

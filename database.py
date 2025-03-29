@@ -55,6 +55,8 @@ def get_chat_data(chat_id: int) -> Dict:
                 'time_format': '24h',  # Time format: 12h or 24h
                 'categories': ['Work', 'Personal', 'Shopping', 'Health', 'Other'],  # Default categories
                 'language': 'en',  # User interface language
+                'auto_clean': True,  # Automatically clean old messages
+                'auto_clean_days': 3,  # Days to keep messages before cleaning
             },
             'stats': {
                 'tasks_added': 0,

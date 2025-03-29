@@ -113,9 +113,31 @@ def get_settings_keyboard(settings: Dict[str, Any]) -> List[List[InlineKeyboardB
     sort_by = settings.get('sort_by', 'date')
     sort_text = "📅 Sort by: Date" if sort_by == 'date' else "⭐ Sort by: Priority"
     
+    # Auto-clean setting
+    auto_clean = settings.get('auto_clean', True)
+    auto_clean_text = "🧹 Auto-Clean: ON" if auto_clean else "🧹 Auto-Clean: OFF"
+    
+    # Auto-clean days setting
+    auto_clean_days = settings.get('auto_clean_days', 3)
+    days_text = f"📆 Clean Messages: {auto_clean_days} days"
+    
     keyboard = [
-        [InlineKeyboardButton(reminder_text, callback_data="setting:reminder_default")],
-        [InlineKeyboardButton(sort_text, callback_data="setting:sort_by")],
+        [
+            InlineKeyboardButton(reminder_text, callback_data="setting:reminder_default"),
+            InlineKeyboardButton("ℹ️", callback_data="setting_help:reminder")
+        ],
+        [
+            InlineKeyboardButton(sort_text, callback_data="setting:sort_by"),
+            InlineKeyboardButton("ℹ️", callback_data="setting_help:sort")
+        ],
+        [
+            InlineKeyboardButton(auto_clean_text, callback_data="setting:auto_clean"),
+            InlineKeyboardButton("ℹ️", callback_data="setting_help:auto_clean")
+        ],
+        [
+            InlineKeyboardButton(days_text, callback_data="setting:auto_clean_days"),
+            InlineKeyboardButton("ℹ️", callback_data="setting_help:auto_clean_days")
+        ],
         [InlineKeyboardButton("🔙 Back", callback_data="setting:back")]
     ]
     

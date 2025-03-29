@@ -139,3 +139,22 @@ def format_task_details(task: Dict, include_status: bool = True) -> str:
             pass
     
     return formatted.strip()
+
+def log_command_usage(chat_id, chat_type, user_id, command, success=True):
+    """Log command usage for analytics and debugging
+    
+    Args:
+        chat_id: The ID of the chat where the command was executed
+        chat_type: The type of chat (private, group, etc.)
+        user_id: The ID of the user who executed the command
+        command: The command that was executed
+        success: Whether the command was executed successfully
+    """
+    try:
+        with open("command_usage.log", "a") as f:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            is_dev = is_developer(user_id)
+            status = "SUCCESS" if success else "FAILURE"
+            f.write(f"[{now}] CHAT:{chat_id} TYPE:{chat_type} USER:{user_id} DEV:{is_dev} CMD:{command} STATUS:{status}\n")
+    except Exception as e:
+        logger.error(f"Error logging command usage: {e}")

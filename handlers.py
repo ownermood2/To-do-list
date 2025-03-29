@@ -40,7 +40,8 @@ from utils import (
     format_task_list,
     parse_time,
     format_task_details,
-    get_current_time
+    get_current_time,
+    log_command_usage
 )
 
 from keyboards import (
@@ -60,13 +61,18 @@ maintenance_mode = False
 
 def start_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /start command - introduce the bot to the user/group"""
-    if maintenance_mode and not is_developer(update.effective_user.id):
-        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
-        return
-        
     chat_id = update.effective_chat.id
     chat_type = update.effective_chat.type
+    user_id = update.effective_user.id
     
+    # Log command usage
+    log_command_usage(chat_id, chat_type, user_id, "start")
+    
+    if maintenance_mode and not is_developer(user_id):
+        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
+        log_command_usage(chat_id, chat_type, user_id, "start", success=False)
+        return
+        
     # Update chat type in database
     update_chat_type(chat_id, chat_type)
     
@@ -84,11 +90,17 @@ def start_handler(update: Update, context: CallbackContext) -> None:
 
 def help_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /help command - show available commands"""
-    if maintenance_mode and not is_developer(update.effective_user.id):
-        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
-        return
-        
+    chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
     user_id = update.effective_user.id
+    
+    # Log command usage
+    log_command_usage(chat_id, chat_type, user_id, "help")
+    
+    if maintenance_mode and not is_developer(user_id):
+        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
+        log_command_usage(chat_id, chat_type, user_id, "help", success=False)
+        return
     
     # Build help message with all commands
     help_text = HELP_MESSAGE
@@ -105,11 +117,17 @@ def help_handler(update: Update, context: CallbackContext) -> None:
 
 def add_task_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /add command - add a new task"""
-    if maintenance_mode and not is_developer(update.effective_user.id):
-        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
-        return
-        
     chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+    user_id = update.effective_user.id
+    
+    # Log command usage
+    log_command_usage(chat_id, chat_type, user_id, "add")
+    
+    if maintenance_mode and not is_developer(user_id):
+        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
+        log_command_usage(chat_id, chat_type, user_id, "add", success=False)
+        return
     
     # Check if task text is provided
     if not context.args:
@@ -118,6 +136,7 @@ def add_task_handler(update: Update, context: CallbackContext) -> None:
             "For example: `/add Buy groceries`",
             parse_mode=ParseMode.MARKDOWN
         )
+        log_command_usage(chat_id, chat_type, user_id, "add", success=False)
         return
     
     # Join all arguments into a single task text
@@ -128,7 +147,6 @@ def add_task_handler(update: Update, context: CallbackContext) -> None:
     task_index = len(get_tasks(chat_id)) - 1  # Get index of newly added task
     
     # Get chat type to personalize the message
-    chat_type = update.effective_chat.type
     is_group = chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
     
     # Create task added confirmation message
@@ -150,11 +168,17 @@ def add_task_handler(update: Update, context: CallbackContext) -> None:
 
 def list_tasks_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /list command - list all tasks"""
-    if maintenance_mode and not is_developer(update.effective_user.id):
-        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
-        return
-        
     chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+    user_id = update.effective_user.id
+    
+    # Log command usage
+    log_command_usage(chat_id, chat_type, user_id, "list")
+    
+    if maintenance_mode and not is_developer(user_id):
+        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
+        log_command_usage(chat_id, chat_type, user_id, "list", success=False)
+        return
     
     # Get tasks for this chat
     tasks = get_tasks(chat_id)
@@ -412,11 +436,64 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             chat_data['stats']['last_active'] = iso_now()
             update_chat_data(chat_id, chat_data)
         
-        # Reply with confirmation
+        # Check if private chat and offer quick actions
+        is_private = update.effective_chat.type == CHAT_TYPE_PRIVATE
+        if is_private:
+            # Provide quick action buttons for the new task
+            keyboard = [
+                [
+                    InlineKeyboardButton("⏰ Add Reminder", callback_data=f"add_reminder:{len(get_tasks(chat_id))-1}"),
+                    InlineKeyboardButton("🔝 Set Priority", callback_data=f"set_priority:{len(get_tasks(chat_id))-1}")
+                ],
+                [
+                    InlineKeyboardButton("🏷️ Add Tag", callback_data=f"add_tag:{len(get_tasks(chat_id))-1}"),
+                    InlineKeyboardButton("📋 View All Tasks", callback_data="list_tasks")
+                ]
+            ]
+            
+            # Reply with confirmation and action buttons
+            query.edit_message_text(
+                f"✅ Task added successfully:\n\n*{task_text}*\n\nWhat would you like to do with this task?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            # Standard confirmation for group chats
+            query.edit_message_text(
+                f"✅ Task added successfully:\n\n*{task_text}*\n\nUse /list to view all your tasks.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    # New handlers for enhanced private chat functionality
+    elif data == "add_task_help":
+        # Provide help for adding tasks in private chat
         query.edit_message_text(
-            f"✅ Task added successfully:\n\n*{task_text}*\n\nUse /list to view all your tasks.",
+            "➕ *Adding Tasks*\n\n"
+            "Here are different ways to add tasks:\n\n"
+            "• Simply type your task (e.g., 'Buy milk')\n"
+            "• Use `/add Buy groceries` command\n"
+            "• Add with deadline: `/add Meeting with John tomorrow 2pm`\n"
+            "• Add with priority: `/add Important presentation #high`\n"
+            "• Add with category: `/add Buy gift for mom #shopping`\n\n"
+            "You can also combine these options!",
             parse_mode=ParseMode.MARKDOWN
         )
+    
+    elif data == "list_tasks":
+        # Show task list (shortcut for /list command)
+        tasks = get_tasks(chat_id)
+        if tasks:
+            task_text = "📋 *Your Tasks*\n\n" + format_task_list(tasks)
+            keyboard = get_task_list_keyboard(tasks)
+            query.edit_message_text(
+                task_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            query.edit_message_text(
+                "📝 You don't have any tasks yet. Use /add to create one!"
+            )
         
     elif data.startswith("add_task_reminder:"):
         # Add task with reminder from message text
@@ -716,6 +793,181 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
                 "❌ There was an error clearing your completed tasks. Please try again later.",
                 parse_mode=ParseMode.MARKDOWN
             )
+
+    # Private chat enhanced functionality - priorities and tags
+    elif data.startswith("set_priority:"):
+        # Show priority selection for a task
+        task_index = int(data.split(":")[1])
+        tasks = get_tasks(chat_id)
+        
+        if 0 <= task_index < len(tasks):
+            task_text = tasks[task_index]['text']
+            
+            # Create priority selection keyboard
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔴 High", callback_data=f"priority:{task_index}:high"),
+                    InlineKeyboardButton("🟡 Medium", callback_data=f"priority:{task_index}:medium"),
+                    InlineKeyboardButton("🟢 Low", callback_data=f"priority:{task_index}:low")
+                ],
+                [
+                    InlineKeyboardButton("❌ Cancel", callback_data="cancel_priority")
+                ]
+            ]
+            
+            query.edit_message_text(
+                f"🔝 *Select Priority Level*\n\nTask: *{task_text}*",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    elif data.startswith("priority:"):
+        # Set priority for a task
+        parts = data.split(":")
+        task_index = int(parts[1])
+        priority_level = parts[2]
+        
+        tasks = get_tasks(chat_id)
+        
+        if 0 <= task_index < len(tasks):
+            # Get the task and update its priority
+            chat_data = get_chat_data(chat_id)
+            if 'tasks' in chat_data and task_index < len(chat_data['tasks']):
+                task = chat_data['tasks'][task_index]
+                task['priority'] = priority_level
+                update_chat_data(chat_id, chat_data)
+                
+                # Get emoji for priority level
+                priority_emoji = "🔴" if priority_level == "high" else "🟡" if priority_level == "medium" else "🟢"
+                
+                # Success message with task details and options for further actions
+                keyboard = [
+                    [
+                        InlineKeyboardButton("⏰ Add Reminder", callback_data=f"remind:{task_index}"),
+                        InlineKeyboardButton("🏷️ Add Tag", callback_data=f"add_tag:{task_index}")
+                    ],
+                    [
+                        InlineKeyboardButton("📋 View All Tasks", callback_data="list_tasks")
+                    ]
+                ]
+                
+                query.edit_message_text(
+                    f"{priority_emoji} Priority set to *{priority_level.upper()}* for task:\n\n*{task['text']}*",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                query.edit_message_text("❌ Task not found. It may have been deleted.")
+    
+    elif data == "cancel_priority":
+        # Cancel priority setting
+        query.edit_message_text(
+            "❌ Priority setting cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data.startswith("add_tag:"):
+        # Show tag selection or entry UI
+        task_index = int(data.split(":")[1])
+        tasks = get_tasks(chat_id)
+        
+        if 0 <= task_index < len(tasks):
+            task_text = tasks[task_index]['text']
+            
+            # Get existing categories from all tasks
+            chat_data = get_chat_data(chat_id)
+            all_tasks = chat_data.get('tasks', [])
+            existing_categories = set()
+            for t in all_tasks:
+                if 'category' in t and t['category']:
+                    existing_categories.add(t['category'])
+            
+            # Create buttons for common categories
+            keyboard = []
+            
+            # Add buttons for existing categories (up to 6)
+            common_categories = list(existing_categories)[:6]
+            for i in range(0, len(common_categories), 2):
+                row = []
+                row.append(InlineKeyboardButton(f"#{common_categories[i]}", callback_data=f"tag:{task_index}:{common_categories[i]}"))
+                if i+1 < len(common_categories):
+                    row.append(InlineKeyboardButton(f"#{common_categories[i+1]}", callback_data=f"tag:{task_index}:{common_categories[i+1]}"))
+                keyboard.append(row)
+            
+            # Add preset common tags if we have few existing ones
+            if len(existing_categories) < 4:
+                preset_categories = ["Work", "Personal", "Shopping", "Health", "Urgent", "Project"]
+                for cat in preset_categories:
+                    if cat not in existing_categories:
+                        common_categories.append(cat)
+                        if len(common_categories) >= 6:
+                            break
+            
+            # Add custom tag option and cancel
+            keyboard.append([InlineKeyboardButton("✏️ Custom Tag", callback_data=f"custom_tag:{task_index}")])
+            keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_tag")])
+            
+            query.edit_message_text(
+                f"🏷️ *Select or Add a Tag*\n\nTask: *{task_text}*\n\nChoose from existing tags or create a custom one:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            # Store that we're waiting for a custom tag entry
+            context.user_data['custom_tag_task'] = task_index
+    
+    elif data.startswith("tag:"):
+        # Apply a tag to a task
+        parts = data.split(":")
+        task_index = int(parts[1])
+        category = parts[2]
+        
+        # Update the task with the selected category
+        chat_data = get_chat_data(chat_id)
+        if 'tasks' in chat_data and task_index < len(chat_data['tasks']):
+            task = chat_data['tasks'][task_index]
+            task['category'] = category
+            update_chat_data(chat_id, chat_data)
+            
+            # Success message with further options
+            keyboard = [
+                [
+                    InlineKeyboardButton("⏰ Add Reminder", callback_data=f"remind:{task_index}"),
+                    InlineKeyboardButton("🔝 Set Priority", callback_data=f"set_priority:{task_index}")
+                ],
+                [
+                    InlineKeyboardButton("📋 View All Tasks", callback_data="list_tasks")
+                ]
+            ]
+            
+            query.edit_message_text(
+                f"🏷️ Tag *#{category}* added to task:\n\n*{task['text']}*",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            query.edit_message_text("❌ Task not found. It may have been deleted.")
+    
+    elif data.startswith("custom_tag:"):
+        # Store that we're waiting for custom tag input
+        task_index = int(data.split(":")[1])
+        context.user_data['custom_tag_task'] = task_index
+        
+        query.edit_message_text(
+            "✏️ Please send me the name for your custom tag (one word without spaces).\n\n"
+            "Type 'cancel' to cancel.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "cancel_tag":
+        # Cancel tag addition
+        if 'custom_tag_task' in context.user_data:
+            del context.user_data['custom_tag_task']
+            
+        query.edit_message_text(
+            "❌ Tag addition cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
             
     # Broadcast deletion related callbacks
     elif data.startswith("delbroadcast:"):
@@ -1311,6 +1563,29 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
         else:
             query.edit_message_text("❌ Failed to update category. Task not found.")
     
+    elif data.startswith("setting_help:"):
+        # Handle setting help requests
+        setting_help = data.split(":", 1)[1]
+        
+        help_texts = {
+            "reminder": "⚙️ *Default Reminder*\n\nWhen turned ON, all new tasks will automatically have a reminder set (24 hours before due date). This is useful for ensuring you don't forget any tasks.\n\nClick the button to toggle this setting ON/OFF.",
+            "sort": "⚙️ *Sort Tasks By*\n\nChoose how your tasks are sorted when displayed:\n• *Date*: Sort by due date (soonest first)\n• *Priority*: Sort by priority level (highest first)\n\nClick the button to switch between these options.",
+            "auto_clean": "⚙️ *Auto-Clean*\n\nWhen turned ON, the bot will automatically delete its old messages in group chats to keep the chat tidy.\n\nThis is especially useful in busy groups so old bot responses don't clutter the chat history.\n\nClick the button to toggle this setting ON/OFF.",
+            "auto_clean_days": "⚙️ *Clean Messages Days*\n\nSet how many days to keep bot messages before cleaning them:\n• 3 days: Quick cleanup (good for active groups)\n• 7 days: Standard (recommended)\n• 14 days: Extended history\n• 30 days: Maximum retention\n\nClick the button to cycle through these options."
+        }
+        
+        # Get the appropriate help text
+        help_text = help_texts.get(setting_help, "No help available for this setting.")
+        
+        # Show help text with a "Back to Settings" button
+        keyboard = [[InlineKeyboardButton("🔙 Back to Settings", callback_data="setting:back")]]
+        
+        query.edit_message_text(
+            help_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
     elif data.startswith("setting:"):
         # Handle settings changes
         setting = data.split(":", 1)[1]
@@ -1338,6 +1613,37 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             current = chat_data.get('settings', {}).get('sort_by', 'date')
             new_sort = 'priority' if current == 'date' else 'date'
             update_settings(chat_id, {'sort_by': new_sort})
+            
+            # Refresh settings menu
+            chat_data = get_chat_data(chat_id)
+            settings = chat_data.get('settings', {})
+            
+        elif setting == "auto_clean":
+            # Toggle auto-clean setting
+            chat_data = get_chat_data(chat_id)
+            current = chat_data.get('settings', {}).get('auto_clean', True)
+            update_settings(chat_id, {'auto_clean': not current})
+            
+            # Refresh settings menu
+            chat_data = get_chat_data(chat_id)
+            settings = chat_data.get('settings', {})
+            
+        elif setting == "auto_clean_days":
+            # Cycle through different day options (3, 7, 14, 30)
+            chat_data = get_chat_data(chat_id)
+            current = chat_data.get('settings', {}).get('auto_clean_days', 3)
+            
+            # Cycle through 3 -> 7 -> 14 -> 30 -> 3
+            if current == 3:
+                new_days = 7
+            elif current == 7:
+                new_days = 14
+            elif current == 14:
+                new_days = 30
+            else:
+                new_days = 3
+                
+            update_settings(chat_id, {'auto_clean_days': new_days})
             
             # Refresh settings menu
             chat_data = get_chat_data(chat_id)
@@ -2107,6 +2413,76 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
         
         return
     
+    # Check if waiting for a custom tag
+    if context.user_data and "custom_tag_task" in context.user_data:
+        task_index = context.user_data["custom_tag_task"]
+        
+        # Check for cancel
+        if message_text.lower() == "cancel":
+            update.message.reply_text(
+                "⏹️ Tag addition cancelled.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            del context.user_data["custom_tag_task"]
+            return
+            
+        # Process the tag (remove spaces and special characters)
+        tag = message_text.strip().replace(" ", "_")
+        tag = ''.join(c for c in tag if c.isalnum() or c == '_')
+        
+        if not tag:
+            update.message.reply_text(
+                "⚠️ Please provide a valid tag (letters, numbers, underscores).\n\n"
+                "Try again or type 'cancel' to cancel.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+            
+        # Update the task with the custom tag
+        tasks = get_tasks(chat_id)
+        if 0 <= task_index < len(tasks):
+            chat_data = get_chat_data(chat_id)
+            if 'tasks' in chat_data and task_index < len(chat_data['tasks']):
+                task = chat_data['tasks'][task_index]
+                task['category'] = tag
+                task_text = task['text']
+                update_chat_data(chat_id, chat_data)
+                
+                # Success message with further options
+                keyboard = [
+                    [
+                        InlineKeyboardButton("⏰ Add Reminder", callback_data=f"remind:{task_index}"),
+                        InlineKeyboardButton("🔝 Set Priority", callback_data=f"set_priority:{task_index}")
+                    ],
+                    [
+                        InlineKeyboardButton("📋 View All Tasks", callback_data="list_tasks")
+                    ]
+                ]
+                
+                update.message.reply_text(
+                    f"🏷️ Custom tag *#{tag}* added to task:\n\n*{task_text}*",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+                # Clean up user data
+                del context.user_data["custom_tag_task"]
+                return
+            else:
+                update.message.reply_text(
+                    "❌ Task not found. It may have been deleted.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                del context.user_data["custom_tag_task"]
+                return
+        else:
+            update.message.reply_text(
+                "❌ Task not found. It may have been deleted.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            del context.user_data["custom_tag_task"]
+            return
+    
     # Check if waiting for custom reminder time
     if context.user_data and "custom_reminder_task" in context.user_data:
         task_index = context.user_data["custom_reminder_task"]
@@ -2298,25 +2674,62 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
         except Exception as e:
             logger.error(f"Error processing command with username: {e}")
     
-    # Only prompt for task creation in private chats, not in groups
-    # In groups, users must use explicit commands like /add to create tasks
-    if not is_group and len(message_text) > 3 and not message_text.startswith('/'):
-        # Ask if user wants to add this as a task with smart buttons
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Yes, add task", callback_data=f"add_task:{message_text[:200]}"),
-                InlineKeyboardButton("❌ No", callback_data="cancel_add_task")
-            ],
-            [
-                InlineKeyboardButton("⏰ Add with reminder", callback_data=f"add_task_reminder:{message_text[:200]}")
-            ]
-        ]
+    # Private chat command handling for commands without the slash prefix
+    if not is_group:
+        # Check if the message could be a command without the slash
+        lowercase_text = message_text.lower()
         
-        update.message.reply_text(
-            "📝 Did you want to add this as a new task?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        # Map of command keywords to their handler functions
+        command_keywords = {
+            'add': add_task_handler,
+            'list': list_tasks_handler,
+            'done': done_task_handler,
+            'delete': delete_task_handler,
+            'clear': clear_tasks_handler,
+            'remind': remind_task_handler,
+            'today': today_tasks_handler,
+            'week': week_tasks_handler,
+            'help': help_handler,
+            'settings': settings_handler,
+            'stats': user_stats_handler,
+            'tag': tag_task_handler,
+            'search': search_tasks_handler,
+            'priority': priority_task_handler,
+        }
+        
+        # Check if message starts with any of the command keywords
+        for keyword, handler_func in command_keywords.items():
+            if lowercase_text.startswith(keyword + ' ') or lowercase_text == keyword:
+                # Extract everything after the command word as arguments for context
+                if ' ' in message_text:
+                    args_text = message_text[len(keyword):].strip()
+                    # Set context.args manually for the handler function
+                    context.args = args_text.split()
+                else:
+                    context.args = []
+                
+                # Call the appropriate handler
+                handler_func(update, context)
+                return
+    
+        # Continue with normal task creation for text that doesn't match commands
+        if len(message_text) > 3 and not message_text.startswith('/'):
+            # Ask if user wants to add this as a task with smart buttons
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Yes, add task", callback_data=f"add_task:{message_text[:200]}"),
+                    InlineKeyboardButton("❌ No", callback_data="cancel_add_task")
+                ],
+                [
+                    InlineKeyboardButton("⏰ Add with reminder", callback_data=f"add_task_reminder:{message_text[:200]}")
+                ]
+            ]
+            
+            update.message.reply_text(
+                "📝 Did you want to add this as a new task?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
     elif is_group and len(message_text) > 3 and not message_text.startswith('/'):
         # In groups, we don't automatically add tasks from regular messages
         

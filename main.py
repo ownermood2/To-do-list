@@ -6,6 +6,9 @@ import traceback
 import subprocess
 from datetime import datetime
 
+# Import developer IDs
+from config import DEVELOPER_IDS
+
 # Ensure we have the right python-telegram-bot version
 try:
     from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
@@ -64,6 +67,8 @@ def log_uptime():
     logger.info(f"Bot uptime: {int(days)} days, {int(hours)} hours, {int(minutes)} minutes, {int(seconds)} seconds")
     return uptime
 
+
+
 def handle_error(error):
     """Handle errors that occur during bot operation"""
     global restart_count, last_restart_time
@@ -116,7 +121,7 @@ def main():
                     logger.info("Running scheduled auto-cleanup task")
                     try:
                         from auto_cleanup import clean_old_messages
-                        clean_old_messages(TELEGRAM_TOKEN, days_old=7)
+                        clean_old_messages(TELEGRAM_TOKEN, default_days_old=7)
                         logger.info("Scheduled auto-cleanup completed successfully")
                     except Exception as e:
                         logger.error(f"Scheduled auto-cleanup failed: {e}")

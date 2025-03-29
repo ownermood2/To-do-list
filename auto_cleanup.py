@@ -46,28 +46,25 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def clean_old_messages(bot_token, days_old=7):
+def clean_old_messages(bot_token, default_days_old=7):
     """
     Clean up old bot messages from group chats
     
     Args:
         bot_token (str): The Telegram bot token
-        days_old (int): Messages older than this many days will be cleaned up
+        default_days_old (int): Default number of days for chats without settings
     """
     bot = Bot(token=bot_token)
     data = get_data()
     chat_ids = get_all_chat_ids()
     
-    logger.info(f"Starting automatic cleanup of messages older than {days_old} days")
+    logger.info(f"Starting automatic cleanup with default setting of {default_days_old} days")
     
     # Only clean group chats
     group_count = 0
     message_count = 0
     failed_count = 0
-    
-    # Calculate cutoff date
-    cutoff_time = datetime.now() - timedelta(days=days_old)
-    cutoff_timestamp = cutoff_time.timestamp()
+    skipped_count = 0
     
     for chat_id_str in chat_ids:
         try:
@@ -78,8 +75,26 @@ def clean_old_messages(bot_token, days_old=7):
             chat_type = chat_data.get('type')
             if chat_type not in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
                 continue
-                
+            
+            # Check chat settings for auto-clean preference
+            settings = chat_data.get('settings', {})
+            auto_clean_enabled = settings.get('auto_clean', True)
+            
+            # Skip chats where auto_clean is disabled
+            if not auto_clean_enabled:
+                logger.info(f"Skipping chat {chat_id} - auto-clean disabled in settings")
+                skipped_count += 1
+                continue
+            
+            # Get the auto_clean_days setting or use default
+            days_old = settings.get('auto_clean_days', default_days_old)
+            
+            # Calculate cutoff date for this specific chat
+            cutoff_time = datetime.now() - timedelta(days=days_old)
+            cutoff_timestamp = cutoff_time.timestamp()
+            
             group_count += 1
+            logger.info(f"Cleaning chat {chat_id} with {days_old} days threshold")
             
             # Check if we have message records for this chat
             if 'bot_messages' in chat_data:
@@ -115,7 +130,7 @@ def clean_old_messages(bot_token, days_old=7):
         except Exception as e:
             logger.error(f"Error cleaning chat {chat_id_str}: {e}")
     
-    logger.info(f"Auto-cleanup complete. Processed {group_count} groups, cleaned {message_count} messages, {failed_count} failed")
+    logger.info(f"Auto-cleanup complete. Processed {group_count} groups, cleaned {message_count} messages, {failed_count} failed, {skipped_count} skipped")
 
 def main():
     """Run the cleanup process"""
@@ -127,8 +142,8 @@ def main():
         return
     
     try:
-        # Clean messages older than 7 days
-        clean_old_messages(token, days_old=7)
+        # Clean messages using default of 7 days (but will use chat-specific settings)
+        clean_old_messages(token, default_days_old=7)
     except Exception as e:
         logger.error(f"Auto-cleanup failed: {e}")
 
