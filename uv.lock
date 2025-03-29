@@ -26,6 +26,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cachetools"
+version = "4.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/ba/619250fa6bc11ce6aa4de0604d45843090a53cd7d10d7253b89669313370/cachetools-4.2.2.tar.gz", hash = "sha256:61b5ed1e22a0924aed1d23b478f37e8d52549ff8a961de2909c69bf950020cff", size = 23682 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/28/c4f5796c67ad06bb91d98d543a5e01805c1ff065e08871f78e52d2a331ad/cachetools-4.2.2-py3-none-any.whl", hash = "sha256:2cc0b89715337ab6dbba85b5b50effe2b0c74e035d83ee8ed637cf52f12ae001", size = 11998 },
+]
+
+[[package]]
 name = "certifi"
 version = "2025.1.31"
 source = { registry = "https://pypi.org/simple" }
@@ -292,17 +301,18 @@ wheels = [
 
 [[package]]
 name = "python-telegram-bot"
-version = "13.4"
+version = "13.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "apscheduler" },
+    { name = "cachetools" },
     { name = "certifi" },
     { name = "pytz" },
     { name = "tornado" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/d2/b7cc0159aab450082e840aa036c5f9c1215c7a3db6a274d62f164defc461/python-telegram-bot-13.4.tar.gz", hash = "sha256:6a40b9f00de284baee998b390621aa1e3bd37a41eeaff49350605b2fdeade070", size = 305511 }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/3f/7573a339a38bc0ed6abb5e4e597a3190027573573e4d01fa5d4cd7a6d9ba/python-telegram-bot-13.7.tar.gz", hash = "sha256:24df75459e335b96baffa6991679f844bd426978af5a69ca419a0ac43a40602c", size = 338448 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/0a/cf33ef7f57a22941e736a02cd5d0d05430ae8ad3587770cfacae16fcddb1/python_telegram_bot-13.4-py3-none-any.whl", hash = "sha256:7e4ba396461a52945c5b2823372cd1e9e70871ef097e9167e5f0c05797664949", size = 448042 },
+    { url = "https://files.pythonhosted.org/packages/22/50/b6b14ae91af8cf27798bad2e0bc214133009aae62bafe5136b051a17ba98/python_telegram_bot-13.7-py3-none-any.whl", hash = "sha256:3bf210862744068aa789d5110f8e3a00d98912ce50863384836440a18abf76b5", size = 490084 },
 ]
 
 [[package]]
@@ -335,7 +345,7 @@ requires-dist = [
     { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
     { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
-    { name = "python-telegram-bot", specifier = "==13.4" },
+    { name = "python-telegram-bot", specifier = "==13.7" },
     { name = "telegram", specifier = ">=0.0.1" },
 ]
 
