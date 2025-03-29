@@ -31,35 +31,45 @@ except Exception as e:
     logger.error(f"Error parsing DEVELOPER_IDS: {e}")
     DEVELOPER_IDS = []
 
-# Commands
-COMMANDS = {
-    'start': '🚀 Get started with TaskMaster Pro',
-    'help': '📚 Display comprehensive help and tips',
-    'add': '➕ Create a new task with options',
-    'list': '📋 View your personalized task dashboard',
-    'done': '✅ Mark tasks as completed',
-    'delete': '🗑️ Remove a task permanently',
-    'clear': '🧹 Clear all completed tasks',
-    'remind': '⏰ Set smart reminders for tasks',
-    'settings': '⚙️ Customize your experience',
-    'today': '📆 Show tasks due today',
-    'week': '📅 Show tasks due this week',
-    'priority': '🔝 Set task priority levels',
-    'stats': '📊 View your productivity statistics',
-    'join': '🔗 Join a group via invite link',
-    'tag': '🏷️ Add labels and categories to tasks',
-    'search': '🔍 Find specific tasks',
-    'export': '📤 Export your tasks',
-    'clean': '🧽 Clean up conversation history',
-}
-
-# Developer commands (hidden from regular users)
-DEVELOPER_COMMANDS = {
-    'broadcast': 'Send announcement to all users',
-    'devstats': 'Show detailed bot statistics',
-    'maintenance': 'Enable/disable maintenance mode',
-    'debug': 'Show debug information',
-}
+# Import command definitions from commands.py
+try:
+    from commands import USER_COMMANDS, DEVELOPER_COMMANDS
+    
+    # Create simplified versions for display
+    COMMANDS = {cmd: info['description'] for cmd, info in USER_COMMANDS.items()}
+    DEVELOPER_COMMANDS = {cmd: info['description'] for cmd, info in DEVELOPER_COMMANDS.items()}
+    
+    logger.info("Successfully imported commands from commands module")
+except ImportError:
+    # Fallback commands if the import fails
+    logger.warning("Could not import commands from commands module, using fallbacks")
+    COMMANDS = {
+        'start': '🚀 Get started with TaskMaster Pro',
+        'help': '📚 Display comprehensive help and tips',
+        'add': '➕ Create a new task with options',
+        'list': '📋 View your personalized task dashboard',
+        'done': '✅ Mark tasks as completed',
+        'delete': '🗑️ Remove a task permanently',
+        'clear': '🧹 Clear all completed tasks',
+        'remind': '⏰ Set smart reminders for tasks',
+        'settings': '⚙️ Customize your experience',
+        'today': '📆 Show tasks due today',
+        'week': '📅 Show tasks due this week',
+        'priority': '🔝 Set task priority levels',
+        'stats': '📊 View your productivity statistics',
+        'join': '🔗 Join a group via invite link',
+        'tag': '🏷️ Add labels and categories to tasks',
+        'search': '🔍 Find specific tasks',
+        'clean': '🧽 Clean up conversation history',
+    }
+    
+    # Developer commands (hidden from regular users)
+    DEVELOPER_COMMANDS = {
+        'broadcast': 'Send announcement to all users',
+        'devstats': 'Show detailed bot statistics',
+        'maintenance': 'Enable/disable maintenance mode',
+        'debug': 'Show debug information',
+    }
 
 # Default messages
 WELCOME_MESSAGE = (

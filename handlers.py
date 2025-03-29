@@ -1,8 +1,15 @@
 import logging
 import time
+import random
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import CallbackContext
+
+# Chat type constants for better code readability
+CHAT_TYPE_PRIVATE = "private"
+CHAT_TYPE_GROUP = "group"
+CHAT_TYPE_SUPERGROUP = "supergroup"
+CHAT_TYPE_CHANNEL = "channel"
 from config import (
     WELCOME_MESSAGE, 
     HELP_MESSAGE, 
@@ -44,10 +51,7 @@ logger = logging.getLogger(__name__)
 # Global maintenance mode flag
 maintenance_mode = False
 
-# Define chat types as constants
-CHAT_TYPE_PRIVATE = 'private'
-CHAT_TYPE_GROUP = 'group'
-CHAT_TYPE_SUPERGROUP = 'supergroup'
+# Using the chat types constants defined above
 
 def start_handler(update: Update, context: CallbackContext) -> None:
     """Handle the /start command - introduce the bot to the user/group"""
@@ -420,7 +424,7 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
         keyboard = get_time_selection_keyboard(task_index)
         
         # Check if this is a group chat for friendlier message
-        is_group = update.effective_chat.type in ["group", "supergroup"]
+        is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
         
         query.edit_message_text(
             f"⏰ Task added! When should I remind {'everyone' if is_group else 'you'} about:\n\n*{task_text}*",
@@ -433,7 +437,7 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
         task_text = data.split(":", 1)[1]
         
         # Check if we're actually in a group chat
-        is_group = update.effective_chat.type in ["group", "supergroup"]
+        is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
         if not is_group:
             query.edit_message_text(
                 "⚠️ This option is only available in group chats.",
@@ -565,7 +569,7 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             keyboard = get_time_selection_keyboard(task_index)
             
             # Check if this is a group chat
-            is_group = update.effective_chat.type in ["group", "supergroup"]
+            is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
             
             query.edit_message_text(
                 f"⏰ *When should I remind {'everyone' if is_group else 'you'} about:*\n\n*{task_text}*",
@@ -579,6 +583,130 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             "⏹️ Reminder setup cancelled.",
             parse_mode=ParseMode.MARKDOWN
         )
+        
+    # Chat cleanup actions
+    elif data.startswith("clean_chat:"):
+        action = data.split(":", 1)[1]
+        chat_type = update.effective_chat.type
+        
+        if action == "bot_only":
+            # Try to clean up recent bot messages
+            try:
+                # Delete the prompt message
+                query.message.delete()
+                
+                # Show temporary confirmation message that will self-destruct
+                cleanup_msg = context.bot.send_message(
+                    chat_id=chat_id,
+                    text="🧹 *Cleaning up my messages...*\n(This message will disappear in a few seconds)",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+                # Schedule this message for deletion too
+                context.job_queue.run_once(
+                    lambda job_context: cleanup_msg.delete(),
+                    5,  # 5 seconds delay
+                    context=None
+                )
+                
+                # If we have a record of recent bot messages in this chat, try to delete them
+                if context.chat_data.get('cleanup_messages'):
+                    for msg_data in context.chat_data['cleanup_messages']:
+                        try:
+                            # Try to delete both command and prompt messages
+                            context.bot.delete_message(chat_id=chat_id, message_id=msg_data['command_id'])
+                            context.bot.delete_message(chat_id=chat_id, message_id=msg_data['prompt_id'])
+                        except Exception as e:
+                            logger.debug(f"Could not delete message {msg_data['prompt_id']}: {e}")
+                    
+                    # Clear the cleanup messages list
+                    context.chat_data['cleanup_messages'] = []
+                
+                logger.info(f"Chat cleanup (bot messages) executed in {chat_id}")
+                
+            except Exception as e:
+                logger.error(f"Error during chat cleanup: {e}")
+                # Don't send error message to avoid adding more clutter
+        
+        elif action == "tasks":
+            # In group chats, offer to clean all task listings
+            if chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
+                # Show a confirmation keyboard first
+                keyboard = [
+                    [
+                        InlineKeyboardButton("✅ Yes, clean all", callback_data="confirm_clear"),
+                        InlineKeyboardButton("❌ No, cancel", callback_data="cancel_clear")
+                    ]
+                ]
+                
+                query.edit_message_text(
+                    "⚠️ *Are you sure?*\n\nThis will clear ALL tasks for this group. This action cannot be undone.",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+            else:
+                # For private chats, do the same
+                keyboard = [
+                    [
+                        InlineKeyboardButton("✅ Yes, clean all", callback_data="confirm_clear"),
+                        InlineKeyboardButton("❌ No, cancel", callback_data="cancel_clear")
+                    ]
+                ]
+                
+                query.edit_message_text(
+                    "⚠️ *Are you sure?*\n\nThis will clear ALL your tasks. This action cannot be undone.",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+        elif action == "completed":
+            # Only for private chats, clear completed tasks
+            # First offer confirmation
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Yes, clear completed", callback_data="confirm_clear_completed"),
+                    InlineKeyboardButton("❌ No, cancel", callback_data="cancel_clear")
+                ]
+            ]
+            
+            query.edit_message_text(
+                "⚠️ *Clear completed tasks?*\n\nThis will remove all completed tasks from your list.",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        elif action == "cancel":
+            query.edit_message_text(
+                "❌ Cleanup operation cancelled.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    elif data == "confirm_clear_completed":
+        # Clear only completed tasks
+        try:
+            # Get all tasks for this chat
+            chat_data = get_chat_data(chat_id)
+            tasks = chat_data.get('tasks', [])
+            
+            # Count how many completed tasks we have
+            completed_count = sum(1 for task in tasks if task.get('done', False))
+            
+            # Filter out completed tasks
+            chat_data['tasks'] = [task for task in tasks if not task.get('done', False)]
+            update_chat_data(chat_id, chat_data)
+            
+            query.edit_message_text(
+                f"🧹 Cleared {completed_count} completed tasks.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        except Exception as e:
+            logger.error(f"Error clearing completed tasks: {e}")
+            query.edit_message_text(
+                "❌ There was an error clearing your completed tasks. Please try again later.",
+                parse_mode=ParseMode.MARKDOWN
+            )
         
     elif data.startswith("time:"):
         # Set reminder with predefined time
@@ -605,7 +733,7 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
                         time_display += f" {mins} minute{'s' if mins != 1 else ''}"
                 
                 # Check if this is a group chat
-                is_group = update.effective_chat.type in ["group", "supergroup"]
+                is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
                 mention = f"@all" if is_group else "you"
                 
                 query.edit_message_text(
@@ -682,7 +810,7 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
                 task_text = tasks[task_index]['text']
                 
                 # Check if this is a group chat
-                is_group = update.effective_chat.type in ["group", "supergroup"]
+                is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
                 mention = f"everyone in this group" if is_group else "you"
                 
                 query.edit_message_text(
@@ -1315,45 +1443,79 @@ def clean_chat_handler(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     chat_type = update.effective_chat.type
     
+    # Store the message ID to refer back after confirmation
+    command_message_id = update.message.message_id
+    
     # We need different approaches for groups vs private chats
     if chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
-        # For groups, we'll delete a limited number of recent bot messages
-        try:
-            # First, send a notification message that we'll delete soon
-            cleanup_msg = update.message.reply_text(
-                "🧹 Cleaning up my messages from this chat...\n"
-                "This message will self-destruct in 5 seconds.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-            # Try to delete the command message if the bot has permission
-            try:
-                update.message.delete()
-            except Exception:
-                pass  # Silently fail if we don't have permission
-                
-            # Schedule cleanup message for deletion after 5 seconds
-            context.job_queue.run_once(
-                lambda job_context: cleanup_msg.delete(),
-                5,  # 5 seconds delay
-                context=None
-            )
-            
-            logger.info(f"Chat cleanup requested in {chat_id} (group chat)")
-        except Exception as e:
-            logger.error(f"Error cleaning chat: {str(e)}")
-            update.message.reply_text(
-                f"❌ I couldn't clean the chat. Error: {str(e)}\n\n"
-                "I might need more permissions in this group."
-            )
-    else:
-        # For private chats, just send a message
-        update.message.reply_text(
-            "🧹 To clean our conversation, you can use the 'Clear chat' option in Telegram's menu.\n\n"
-            "This is accessible by clicking the three dots in the top-right corner of our chat.",
+        # For groups, offer options with confirmation
+        keyboard = [
+            [
+                InlineKeyboardButton("🧹 Clean bot messages", callback_data="clean_chat:bot_only"),
+                InlineKeyboardButton("🧹 Clean all tasks", callback_data="clean_chat:tasks")
+            ],
+            [
+                InlineKeyboardButton("❌ Cancel", callback_data="clean_chat:cancel")
+            ]
+        ]
+        
+        prompt_message = update.message.reply_text(
+            "🧹 *Chat Cleanup Options*\n\n"
+            "• *Clean bot messages*: Removes recent bot messages from this chat\n"
+            "• *Clean all tasks*: Removes task listings and prompts\n\n"
+            "What would you like to do?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
-        logger.info(f"Chat cleanup instruction sent in {chat_id} (private chat)")
+        
+        # Store the prompt message ID in the context for later deletion
+        if not context.chat_data.get('cleanup_messages'):
+            context.chat_data['cleanup_messages'] = []
+        
+        context.chat_data['cleanup_messages'].append({
+            'command_id': command_message_id,
+            'prompt_id': prompt_message.message_id,
+            'timestamp': datetime.now().timestamp()
+        })
+        
+        # Schedule automatic cleanup of old cleanup messages
+        def clean_old_prompts(context):
+            if context.chat_data.get('cleanup_messages'):
+                current_time = datetime.now().timestamp()
+                # Filter out messages older than 10 minutes
+                context.chat_data['cleanup_messages'] = [
+                    msg for msg in context.chat_data['cleanup_messages'] 
+                    if current_time - msg['timestamp'] < 600  # 10 minutes
+                ]
+        
+        context.job_queue.run_once(
+            clean_old_prompts,
+            600,  # 10 minutes
+            context=context
+        )
+        
+        logger.info(f"Chat cleanup options presented in {chat_id} (group chat)")
+    else:
+        # For private chats, offer more options
+        keyboard = [
+            [
+                InlineKeyboardButton("🧹 Clean bot messages", callback_data="clean_chat:bot_only"),
+                InlineKeyboardButton("🧹 Clear completed tasks", callback_data="clean_chat:completed")
+            ],
+            [
+                InlineKeyboardButton("❌ Cancel", callback_data="clean_chat:cancel")
+            ]
+        ]
+        
+        update.message.reply_text(
+            "🧹 *Chat Cleanup Options*\n\n"
+            "• *Clean bot messages*: I'll try to remove my recent messages\n"
+            "• *Clear completed tasks*: Remove all completed tasks from your list\n\n"
+            "Alternatively, you can use Telegram's built-in 'Clear chat' option by clicking the three dots ⋮ in the top-right corner.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        logger.info(f"Chat cleanup options presented in {chat_id} (private chat)")
 
 def text_message_handler(update: Update, context: CallbackContext) -> None:
     """Handle text messages that are not commands"""
@@ -1409,7 +1571,7 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
                         formatted_time = reminder_datetime.strftime("%a, %b %d at %I:%M %p")
                         
                         # Check if this is a group chat for friendlier message
-                        is_group = update.effective_chat.type in ["group", "supergroup"]
+                        is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
                         mention = f"everyone in this group" if is_group else "you"
                         
                         update.message.reply_text(
@@ -1502,7 +1664,57 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             return
     
     # Check if we're in a group chat
-    is_group = update.effective_chat.type in ["group", "supergroup"]
+    is_group = update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
+    
+    # Check if this is a command with a bot username in a group chat (e.g., /done@BotUsername)
+    if is_group and '@' in message_text and message_text.startswith('/'):
+        try:
+            # Extract the command part (e.g., "/done" from "/done@BotUsername")
+            command_parts = message_text.split('@', 1)
+            command = command_parts[0].strip()
+            
+            # Get our bot's username to check if the command is for us
+            bot_username = context.bot.username
+            
+            # Check if the message has our bot's username
+            if len(command_parts) > 1 and bot_username and command_parts[1].strip().lower() == bot_username.lower():
+                logger.debug(f"Detected command for this bot in group: {command}")
+                # Special handling for problematic commands
+                if command == '/done':
+                    # Create a new context with fixed args
+                    if len(context.args) > 0:
+                        # Pass through existing arguments
+                        done_task_handler(update, context)
+                    else:
+                        # Show the task list with done buttons
+                        tasks = get_tasks(chat_id)
+                        if tasks:
+                            task_text = "Select a task to mark as done:\n\n" + format_task_list(tasks)
+                            keyboard = get_task_list_keyboard(tasks, action_type="done")
+                            update.message.reply_text(
+                                task_text,
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                        else:
+                            update.message.reply_text("📝 You don't have any tasks yet. Use /add to create one!")
+                    return
+                elif command == '/priority':
+                    # Special handling for priority command
+                    priority_task_handler(update, context)
+                    return
+                elif command == '/tag':
+                    # Special handling for tag command
+                    tag_task_handler(update, context)
+                    return
+                elif command == '/delete':
+                    # Special handling for delete command
+                    delete_task_handler(update, context)
+                    return
+                # You can add more commands that need special handling here
+                
+        except Exception as e:
+            logger.error(f"Error processing command with username: {e}")
     
     # Only prompt for task creation in private chats, not in groups
     # In groups, users must use explicit commands like /add to create tasks
@@ -1536,14 +1748,42 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
 
 def error_handler(update: Update, context: CallbackContext) -> None:
     """Handle errors in the telegram bot"""
-    logger.error(f"Update {update} caused error {context.error}")
+    error_message = str(context.error)
+    logger.error(f"Update {update} caused error {error_message}")
     
-    # Try to notify the user about the error
+    # Skip sending error messages for entity parsing errors in groups
+    if "Can't parse entities" in error_message and update and update.effective_chat:
+        if update.effective_chat.type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
+            # Just log the error but don't send a message to avoid spamming the group
+            return
+    
+    # For message-specific errors, we'll try to extract the command and execute it properly
+    if "Can't parse entities" in error_message and update and update.effective_message:
+        try:
+            # Try to extract the command from the text
+            message_text = update.effective_message.text
+            if message_text and '@' in message_text:
+                # Extract the command part before the @
+                command_parts = message_text.split('@')[0].strip()
+                
+                # Check if this is a valid command
+                if command_parts.startswith('/'):
+                    # Execute the command without the bot username
+                    # We'll create a new update object with the fixed command
+                    logger.info(f"Attempting to process command: {command_parts}")
+                    # Let the appropriate command handler handle it on the next update
+                    return
+        except Exception as e:
+            logger.error(f"Error while trying to fix entity parsing: {e}")
+    
+    # Try to notify the user about the error for non-entity parsing issues
     if update and update.effective_chat:
-        context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Sorry, something went wrong. Please try again later."
-        )
+        # Only send error messages in private chats or for non-entity parsing errors
+        if update.effective_chat.type == CHAT_TYPE_PRIVATE or "Can't parse entities" not in error_message:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Sorry, something went wrong. Please try again later."
+            )
 
 # Developer command handlers
 def broadcast_handler(update: Update, context: CallbackContext) -> None:

@@ -145,12 +145,29 @@ def check_reminders(context: CallbackContext):
 
 def setup_commands(updater):
     """Set up the bot commands that appear in the menu"""
-    # Prepare command list for regular users
-    commands = [BotCommand(command, description) for command, description in COMMANDS.items()]
+    try:
+        # Import commands from the commands module
+        from commands import USER_COMMANDS
+        # Prepare command list for regular users
+        commands = [BotCommand(cmd, info['description']) for cmd, info in USER_COMMANDS.items()]
+    except (ImportError, KeyError):
+        # Fallback to config if commands module is not working
+        commands = [BotCommand(command, description) for command, description in COMMANDS.items()]
     
     # Set commands
-    updater.bot.set_my_commands(commands)
-    logger.info("Bot commands have been set up")
+    try:
+        updater.bot.set_my_commands(commands)
+        logger.info(f"Bot commands have been set up ({len(commands)} commands)")
+    except Exception as e:
+        logger.error(f"Failed to set bot commands: {e}")
+        logger.info("Attempting to set commands without using BotCommand objects")
+        try:
+            # Attempt alternative method
+            command_dict = {cmd.command: cmd.description for cmd in commands}
+            updater.bot.set_my_commands([(cmd, desc) for cmd, desc in command_dict.items()])
+            logger.info("Successfully set commands using alternative method")
+        except Exception as e2:
+            logger.error(f"Alternative method also failed: {e2}")
 
 def create_bot():
     """Create and configure the bot application"""
@@ -163,42 +180,82 @@ def create_bot():
     dispatcher = updater.dispatcher
     initialize_database()
     
-    # Set up command handlers
-    dispatcher.add_handler(CommandHandler("start", start_handler))
-    dispatcher.add_handler(CommandHandler("help", help_handler))
-    dispatcher.add_handler(CommandHandler("add", add_task_handler))
-    dispatcher.add_handler(CommandHandler("list", list_tasks_handler))
-    dispatcher.add_handler(CommandHandler("done", done_task_handler))
-    dispatcher.add_handler(CommandHandler("delete", delete_task_handler))
-    dispatcher.add_handler(CommandHandler("clear", clear_tasks_handler))
-    dispatcher.add_handler(CommandHandler("remind", remind_task_handler))
-    dispatcher.add_handler(CommandHandler("settings", settings_handler))
-    dispatcher.add_handler(CommandHandler("join", join_group_handler))
+    try:
+        # Try to use the improved command registration from commands.py
+        from commands import register_commands
+        
+        # Create a handlers dictionary mapping command names to handler functions
+        handlers = {
+            # Basic commands
+            'start': start_handler,
+            'help': help_handler,
+            'add': add_task_handler,
+            'list': list_tasks_handler,
+            'done': done_task_handler,
+            'delete': delete_task_handler,
+            'clear': clear_tasks_handler,
+            'remind': remind_task_handler,
+            'settings': settings_handler,
+            'join': join_group_handler,
+            
+            # Enhanced commands
+            'today': today_tasks_handler,
+            'week': week_tasks_handler,
+            'priority': priority_task_handler,
+            'tag': tag_task_handler,
+            'search': search_tasks_handler,
+            'clean': clean_chat_handler,
+            'stats': user_stats_handler,
+            
+            # Developer commands
+            'broadcast': broadcast_handler,
+            'devstats': stats_handler,
+            'maintenance': maintenance_handler,
+            'debug': debug_handler,
+        }
+        
+        # Register all commands using the improved handler
+        register_commands(dispatcher, handlers)
+        logger.info("Registered commands using commands.py module")
+    except (ImportError, Exception) as e:
+        logger.warning(f"Failed to use commands.py for registration: {e}. Falling back to manual registration.")
+        # Manual fallback registration if commands.py import fails
+        # Set up command handlers
+        dispatcher.add_handler(CommandHandler("start", start_handler))
+        dispatcher.add_handler(CommandHandler("help", help_handler))
+        dispatcher.add_handler(CommandHandler("add", add_task_handler))
+        dispatcher.add_handler(CommandHandler("list", list_tasks_handler))
+        dispatcher.add_handler(CommandHandler("done", done_task_handler))
+        dispatcher.add_handler(CommandHandler("delete", delete_task_handler))
+        dispatcher.add_handler(CommandHandler("clear", clear_tasks_handler))
+        dispatcher.add_handler(CommandHandler("remind", remind_task_handler))
+        dispatcher.add_handler(CommandHandler("settings", settings_handler))
+        dispatcher.add_handler(CommandHandler("join", join_group_handler))
+        
+        # New enhanced commands
+        dispatcher.add_handler(CommandHandler("today", today_tasks_handler))
+        dispatcher.add_handler(CommandHandler("week", week_tasks_handler))
+        dispatcher.add_handler(CommandHandler("priority", priority_task_handler))
+        dispatcher.add_handler(CommandHandler("tag", tag_task_handler))
+        dispatcher.add_handler(CommandHandler("search", search_tasks_handler))
+        dispatcher.add_handler(CommandHandler("clean", clean_chat_handler))
+        
+        # Developer command handlers
+        dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))
+        dispatcher.add_handler(CommandHandler("devstats", stats_handler))
+        dispatcher.add_handler(CommandHandler("maintenance", maintenance_handler))
+        dispatcher.add_handler(CommandHandler("debug", debug_handler))
+        
+        # Regular user stats command (different from developer stats)
+        dispatcher.add_handler(CommandHandler("stats", user_stats_handler))
     
-    # New enhanced commands
-    dispatcher.add_handler(CommandHandler("today", today_tasks_handler))
-    dispatcher.add_handler(CommandHandler("week", week_tasks_handler))
-    dispatcher.add_handler(CommandHandler("priority", priority_task_handler))
-    dispatcher.add_handler(CommandHandler("tag", tag_task_handler))
-    dispatcher.add_handler(CommandHandler("search", search_tasks_handler))
-    dispatcher.add_handler(CommandHandler("clean", clean_chat_handler))
-    
-    # Developer command handlers
-    dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))
-    dispatcher.add_handler(CommandHandler("devstats", stats_handler))
-    dispatcher.add_handler(CommandHandler("maintenance", maintenance_handler))
-    dispatcher.add_handler(CommandHandler("debug", debug_handler))
-    
-    # Regular user stats command (different from developer stats)
-    dispatcher.add_handler(CommandHandler("stats", user_stats_handler))
-    
-    # Add callback query handler for inline buttons
+    # Add callback query handler for inline buttons (always needed)
     dispatcher.add_handler(CallbackQueryHandler(button_callback_handler))
     
-    # Add general message handler
+    # Add general message handler (always needed)
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, text_message_handler))
     
-    # Add error handler
+    # Add error handler (always needed)
     dispatcher.add_error_handler(error_handler)
     
     # Schedule the reminder check job
