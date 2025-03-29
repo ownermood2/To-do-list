@@ -20,6 +20,13 @@ from handlers import (
     clear_tasks_handler,
     remind_task_handler,
     settings_handler,
+    join_group_handler,
+    today_tasks_handler,
+    week_tasks_handler,
+    priority_task_handler,
+    tag_task_handler,
+    search_tasks_handler,
+    user_stats_handler,
     button_callback_handler,
     text_message_handler,
     error_handler,
@@ -101,12 +108,23 @@ def create_bot():
     dispatcher.add_handler(CommandHandler("clear", clear_tasks_handler))
     dispatcher.add_handler(CommandHandler("remind", remind_task_handler))
     dispatcher.add_handler(CommandHandler("settings", settings_handler))
+    dispatcher.add_handler(CommandHandler("join", join_group_handler))
+    
+    # New enhanced commands
+    dispatcher.add_handler(CommandHandler("today", today_tasks_handler))
+    dispatcher.add_handler(CommandHandler("week", week_tasks_handler))
+    dispatcher.add_handler(CommandHandler("priority", priority_task_handler))
+    dispatcher.add_handler(CommandHandler("tag", tag_task_handler))
+    dispatcher.add_handler(CommandHandler("search", search_tasks_handler))
     
     # Developer command handlers
     dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))
-    dispatcher.add_handler(CommandHandler("stats", stats_handler))
+    dispatcher.add_handler(CommandHandler("devstats", stats_handler))
     dispatcher.add_handler(CommandHandler("maintenance", maintenance_handler))
     dispatcher.add_handler(CommandHandler("debug", debug_handler))
+    
+    # Regular user stats command (different from developer stats)
+    dispatcher.add_handler(CommandHandler("stats", user_stats_handler))
     
     # Add callback query handler for inline buttons
     dispatcher.add_handler(CallbackQueryHandler(button_callback_handler))

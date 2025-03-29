@@ -50,6 +50,21 @@ def get_chat_data(chat_id: int) -> Dict:
                 'reminder_default': False,
                 'reminder_time': 3600,  # Default reminder time (1 hour)
                 'sort_by': 'date',  # Sort tasks by date by default
+                'theme': 'default',  # UI theme preference
+                'notification_level': 'all',  # Notification settings: all, important, none
+                'time_format': '24h',  # Time format: 12h or 24h
+                'categories': ['Work', 'Personal', 'Shopping', 'Health', 'Other'],  # Default categories
+                'language': 'en',  # User interface language
+            },
+            'stats': {
+                'tasks_added': 0,
+                'tasks_completed': 0,
+                'last_active': iso_now(),
+                'streaks': {
+                    'current': 0,
+                    'longest': 0,
+                    'last_completion_date': None
+                }
             }
         }
         save_data()
@@ -61,16 +76,23 @@ def update_chat_data(chat_id: int, chat_data: Dict) -> None:
     _data[chat_id_str] = chat_data
     save_data()
 
-def add_task(chat_id: int, task_text: str, due_date=None, reminder=None) -> Dict:
-    """Add a new task for a chat"""
+def add_task(chat_id: int, task_text: str, due_date=None, reminder=None, priority=None, 
+            category=None, assignee=None, notes=None) -> Dict:
+    """Add a new task for a chat with enhanced properties"""
     chat_data = get_chat_data(chat_id)
     
-    # Create new task
+    # Create new task with advanced properties
     task = {
         'text': task_text,
         'done': False,
         'date_added': iso_now(),
-        'active': True
+        'active': True,
+        'priority': priority or 'normal',  # 'high', 'normal', or 'low'
+        'category': category or 'default',
+        'notes': notes or '',
+        'progress': 0,  # Track progress from 0-100%
+        'attachments': [],
+        'updated_at': iso_now(),
     }
     
     # Add optional fields
@@ -78,6 +100,8 @@ def add_task(chat_id: int, task_text: str, due_date=None, reminder=None) -> Dict
         task['due_date'] = due_date
     if reminder:
         task['reminder'] = reminder
+    if assignee:
+        task['assignee'] = assignee  # For group task assignment
     
     chat_data['tasks'].append(task)
     update_chat_data(chat_id, chat_data)
