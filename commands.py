@@ -83,6 +83,10 @@ DEVELOPER_COMMANDS = {
         'description': 'Send announcement to a specific group',
         'help': 'Send a message to a specific group chat\nUsage options:\n• `/groupcast GROUP_ID Your message here`\n• `/groupcast @group_username Your message here`\n• `/groupcast group_username Your message here`'
     },
+    'delbroadcast': {
+        'description': 'Delete a broadcast from all chats',
+        'help': 'Delete a previously sent broadcast message from all chats\nUsage: /delbroadcast BROADCAST_ID\n\nUse without an ID to see recent broadcasts.'
+    },
     'devstats': {
         'description': 'Show detailed bot statistics',
         'help': 'Display comprehensive usage statistics for the bot'

@@ -2002,22 +2002,43 @@ def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_i
                 )
                 return
         
+        # Generate a broadcast ID for this group message
+        broadcast_id = f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
         # Send the message
         success = False
         try:
-            context.bot.send_message(
+            sent_msg = context.bot.send_message(
                 chat_id=group_id,
                 text=f"📣 *Announcement*\n\n{message}",
                 parse_mode=ParseMode.MARKDOWN
             )
             success = True
+            
+            # Store this broadcast in bot_data for potential deletion
+            if 'broadcasts' not in context.bot_data:
+                context.bot_data['broadcasts'] = {}
+                
+            context.bot_data['broadcasts'][broadcast_id] = {
+                'message': message,
+                'sent_messages': [{
+                    'chat_id': group_id,
+                    'message_id': sent_msg.message_id
+                }],
+                'timestamp': datetime.now().isoformat(),
+                'sender_id': update.effective_user.id,
+                'type': 'group'
+            }
         except Exception as e:
             logger.error(f"Failed to send broadcast to group {group_id}: {e}")
             
         # Update status
         if success:
             update.message.reply_text(
-                f"✅ Successfully sent announcement to group with ID {group_id}."
+                f"✅ Successfully sent announcement to group with ID {group_id}.\n\n"
+                f"Broadcast ID: `{broadcast_id}`\n"
+                f"Use /delbroadcast {broadcast_id} to delete this announcement.",
+                parse_mode=ParseMode.MARKDOWN
             )
         else:
             update.message.reply_text(
@@ -2035,6 +2056,10 @@ def send_group_broadcast_by_username(update: Update, context: CallbackContext, g
     try:
         # Attempt to send message directly to the username
         success = False
+        
+        # Generate a broadcast ID for this group message
+        broadcast_id = f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
         try:
             # Clean up the username if needed
             if not group_username.startswith('@'):
@@ -2052,13 +2077,32 @@ def send_group_broadcast_by_username(update: Update, context: CallbackContext, g
             # Get the actual chat ID for reporting
             actual_chat_id = sent_message.chat_id
             
+            # Store this broadcast in bot_data for potential deletion
+            if 'broadcasts' not in context.bot_data:
+                context.bot_data['broadcasts'] = {}
+                
+            context.bot_data['broadcasts'][broadcast_id] = {
+                'message': message,
+                'sent_messages': [{
+                    'chat_id': actual_chat_id,
+                    'message_id': sent_message.message_id
+                }],
+                'timestamp': datetime.now().isoformat(),
+                'sender_id': update.effective_user.id,
+                'type': 'group',
+                'group_username': group_username
+            }
+            
         except Exception as e:
             logger.error(f"Failed to send broadcast to group @{group_username}: {e}")
             
         # Update status
         if success:
             update.message.reply_text(
-                f"✅ Successfully sent announcement to group @{group_username}."
+                f"✅ Successfully sent announcement to group @{group_username}.\n\n"
+                f"Broadcast ID: `{broadcast_id}`\n"
+                f"Use /delbroadcast {broadcast_id} to delete this announcement.",
+                parse_mode=ParseMode.MARKDOWN
             )
         else:
             update.message.reply_text(
@@ -2090,14 +2134,26 @@ def send_global_broadcast(update: Update, context: CallbackContext, broadcast_me
         f"Sent: 0\nFailed: 0"
     )
     
+    # Track sent messages for potential deletion
+    broadcast_id = datetime.now().strftime('%Y%m%d%H%M%S')
+    sent_messages = []
+    
     # Send the broadcast message to all chats
     for chat_id in chat_ids:
         try:
-            context.bot.send_message(
+            # Send the message and get the message object
+            sent_msg = context.bot.send_message(
                 chat_id=int(chat_id),
                 text=f"📣 *Announcement*\n\n{broadcast_message}",
                 parse_mode=ParseMode.MARKDOWN
             )
+            
+            # Store the chat ID and message ID
+            sent_messages.append({
+                'chat_id': int(chat_id),
+                'message_id': sent_msg.message_id
+            })
+            
             sent_count += 1
             
             # Update status every 10 messages
@@ -2114,10 +2170,24 @@ def send_global_broadcast(update: Update, context: CallbackContext, broadcast_me
             logger.error(f"Failed to send broadcast to {chat_id}: {e}")
             failed_count += 1
     
-    # Final status update
+    # Save broadcast messages to bot data
+    if 'broadcasts' not in context.bot_data:
+        context.bot_data['broadcasts'] = {}
+    
+    context.bot_data['broadcasts'][broadcast_id] = {
+        'message': broadcast_message,
+        'sent_messages': sent_messages,
+        'timestamp': datetime.now().isoformat(),
+        'sender_id': update.effective_user.id
+    }
+    
+    # Final status update with broadcast ID for deletion reference
     status_message.edit_text(
         f"📣 Broadcast complete!\n"
-        f"Sent: {sent_count}\nFailed: {failed_count}"
+        f"Sent: {sent_count}\nFailed: {failed_count}\n\n"
+        f"Broadcast ID: `{broadcast_id}`\n"
+        f"Use /delbroadcast {broadcast_id} to delete this announcement from all chats.",
+        parse_mode=ParseMode.MARKDOWN
     )
 
 def stats_handler(update: Update, context: CallbackContext) -> None:
@@ -2180,3 +2250,100 @@ def debug_handler(update: Update, context: CallbackContext) -> None:
     )
     
     update.message.reply_text(debug_text, parse_mode=ParseMode.MARKDOWN)
+    
+def delete_broadcast_handler(update: Update, context: CallbackContext) -> None:
+    """Handle the /delbroadcast command - delete a broadcast message from all chats (developer only)"""
+    user_id = update.effective_user.id
+    
+    if not is_developer(user_id):
+        update.message.reply_text("❌ This command is only available to developers.")
+        return
+    
+    if not context.args:
+        recent_broadcasts = []
+        if 'broadcasts' in context.bot_data:
+            # Get the 5 most recent broadcasts
+            broadcast_ids = sorted(context.bot_data['broadcasts'].keys(), 
+                                  key=lambda x: context.bot_data['broadcasts'][x].get('timestamp', ''),
+                                  reverse=True)[:5]
+            
+            for broadcast_id in broadcast_ids:
+                broadcast = context.bot_data['broadcasts'][broadcast_id]
+                message_preview = broadcast['message'][:50] + "..." if len(broadcast['message']) > 50 else broadcast['message']
+                sent_count = len(broadcast.get('sent_messages', []))
+                timestamp = broadcast.get('timestamp', 'Unknown')
+                
+                try:
+                    # Convert timestamp to a readable format
+                    dt = datetime.fromisoformat(timestamp)
+                    formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                except:
+                    formatted_time = timestamp
+                
+                recent_broadcasts.append(f"ID: `{broadcast_id}`\nTime: {formatted_time}\nSent to: {sent_count} chats\nMessage: {message_preview}")
+            
+        if recent_broadcasts:
+            update.message.reply_text(
+                "Please provide a broadcast ID to delete.\n\n"
+                "Usage: `/delbroadcast BROADCAST_ID`\n\n"
+                "Recent broadcasts:\n\n" + "\n\n".join(recent_broadcasts),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            update.message.reply_text(
+                "Please provide a broadcast ID to delete.\n\n"
+                "Usage: `/delbroadcast BROADCAST_ID`\n\n"
+                "No recent broadcasts found.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        return
+    
+    broadcast_id = context.args[0]
+    
+    if 'broadcasts' not in context.bot_data or broadcast_id not in context.bot_data['broadcasts']:
+        update.message.reply_text(f"❌ Broadcast with ID {broadcast_id} not found.")
+        return
+    
+    broadcast = context.bot_data['broadcasts'][broadcast_id]
+    sent_messages = broadcast.get('sent_messages', [])
+    
+    # Send a status message first
+    status_message = update.message.reply_text(
+        f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
+        f"Deleted: 0\nFailed: 0"
+    )
+    
+    deleted_count = 0
+    failed_count = 0
+    
+    # Delete each message
+    for msg in sent_messages:
+        try:
+            context.bot.delete_message(
+                chat_id=msg['chat_id'],
+                message_id=msg['message_id']
+            )
+            deleted_count += 1
+            
+            # Update status every 10 deletions
+            if deleted_count % 10 == 0:
+                status_message.edit_text(
+                    f"🗑️ Deleting broadcast messages from {len(sent_messages)} chats...\n"
+                    f"Deleted: {deleted_count}\nFailed: {failed_count}"
+                )
+                
+            # Add a small delay to avoid hitting rate limits
+            time.sleep(0.1)
+            
+        except Exception as e:
+            logger.error(f"Failed to delete message from {msg['chat_id']}: {e}")
+            failed_count += 1
+    
+    # Remove the broadcast from bot_data
+    del context.bot_data['broadcasts'][broadcast_id]
+    
+    # Final status update
+    status_message.edit_text(
+        f"🗑️ Broadcast deletion complete!\n"
+        f"Deleted: {deleted_count}\nFailed: {failed_count}"
+    )
