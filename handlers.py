@@ -1787,7 +1787,7 @@ def error_handler(update: Update, context: CallbackContext) -> None:
 
 # Developer command handlers
 def broadcast_handler(update: Update, context: CallbackContext) -> None:
-    """Handle the /broadcast command - send a message to all users (developer only)"""
+    """Handle the /broadcast command - send a message to all users or to a specific group (developer only)"""
     user_id = update.effective_user.id
     
     if not is_developer(user_id):
@@ -1796,11 +1796,84 @@ def broadcast_handler(update: Update, context: CallbackContext) -> None:
     
     if not context.args:
         update.message.reply_text(
-            "Please provide a message to broadcast after the /broadcast command."
+            "Please provide a message to broadcast after the /broadcast command.\n\n"
+            "Usage options:\n"
+            "• `/broadcast Your message` - Broadcast to all users\n"
+            "• `/broadcast -g GROUP_ID Your message` - Broadcast to a specific group"
         )
         return
     
-    broadcast_message = ' '.join(context.args)
+    # Check if targeting a specific group
+    target_group_id = None
+    if context.args[0] == "-g" and len(context.args) >= 3:
+        try:
+            target_group_id = int(context.args[1])
+            broadcast_message = ' '.join(context.args[2:])
+        except ValueError:
+            update.message.reply_text("❌ Invalid group ID format. Must be a number.")
+            return
+    else:
+        broadcast_message = ' '.join(context.args)
+    
+    if target_group_id:
+        # Single group broadcast
+        send_group_broadcast(update, context, target_group_id, broadcast_message)
+    else:
+        # All users broadcast
+        send_global_broadcast(update, context, broadcast_message)
+
+def send_group_broadcast(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
+    """Send a broadcast message to a specific group"""
+    try:
+        # First check if this is a valid group the bot knows about
+        chat_ids = get_all_chat_ids()
+        group_id_str = str(group_id)
+        
+        if group_id_str not in chat_ids:
+            # Check if we can send a message to this group anyway
+            try:
+                # Send a test message
+                context.bot.send_chat_action(chat_id=group_id, action="typing")
+                chat_exists = True
+            except Exception:
+                chat_exists = False
+                
+            if not chat_exists:
+                update.message.reply_text(
+                    f"⚠️ Group ID {group_id} is not known to the bot or the bot cannot access the group."
+                )
+                return
+        
+        # Send the message
+        success = False
+        try:
+            context.bot.send_message(
+                chat_id=group_id,
+                text=f"📣 *Announcement*\n\n{message}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            success = True
+        except Exception as e:
+            logger.error(f"Failed to send broadcast to group {group_id}: {e}")
+            
+        # Update status
+        if success:
+            update.message.reply_text(
+                f"✅ Successfully sent announcement to group {group_id}."
+            )
+        else:
+            update.message.reply_text(
+                f"❌ Failed to send announcement to group {group_id}. Check logs for details."
+            )
+    
+    except Exception as e:
+        logger.error(f"Error in targeted broadcast: {e}")
+        update.message.reply_text(
+            "❌ An error occurred while trying to send the broadcast."
+        )
+
+def send_global_broadcast(update: Update, context: CallbackContext, broadcast_message: str) -> None:
+    """Send a broadcast message to all chats"""
     chat_ids = get_all_chat_ids()
     
     sent_count = 0
