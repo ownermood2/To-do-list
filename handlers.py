@@ -116,11 +116,27 @@ def add_task_handler(update: Update, context: CallbackContext) -> None:
     
     # Add the task to the database
     task = add_task(chat_id, task_text)
+    task_index = len(get_tasks(chat_id)) - 1  # Get index of newly added task
+    
+    # Get chat type to personalize the message
+    chat_type = update.effective_chat.type
+    is_group = chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]
+    
+    # Create task added confirmation message
+    success_message = (
+        f"✅ Task added successfully!\n\n*{task_text}*\n\n"
+        "Would you like to set a reminder for this task?"
+    )
+    
+    # Set up reminder keyboard for the task
+    keyboard = get_time_selection_keyboard(task_index)
     
     update.message.reply_text(
-        f"✅ Task added successfully!\n\n*{task_text}*",
+        success_message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
+    
     logger.debug(f"New task added in chat {chat_id}: {task_text}")
 
 def list_tasks_handler(update: Update, context: CallbackContext) -> None:
@@ -1289,6 +1305,55 @@ def search_tasks_handler(update: Update, context: CallbackContext) -> None:
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
+
+def clean_chat_handler(update: Update, context: CallbackContext) -> None:
+    """Handle the /clean command - clean up bot messages from chat"""
+    if maintenance_mode and not is_developer(update.effective_user.id):
+        update.message.reply_text("🛠️ Bot is currently in maintenance mode. Please try again later.")
+        return
+        
+    chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+    
+    # We need different approaches for groups vs private chats
+    if chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
+        # For groups, we'll delete a limited number of recent bot messages
+        try:
+            # First, send a notification message that we'll delete soon
+            cleanup_msg = update.message.reply_text(
+                "🧹 Cleaning up my messages from this chat...\n"
+                "This message will self-destruct in 5 seconds.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            # Try to delete the command message if the bot has permission
+            try:
+                update.message.delete()
+            except Exception:
+                pass  # Silently fail if we don't have permission
+                
+            # Schedule cleanup message for deletion after 5 seconds
+            context.job_queue.run_once(
+                lambda job_context: cleanup_msg.delete(),
+                5,  # 5 seconds delay
+                context=None
+            )
+            
+            logger.info(f"Chat cleanup requested in {chat_id} (group chat)")
+        except Exception as e:
+            logger.error(f"Error cleaning chat: {str(e)}")
+            update.message.reply_text(
+                f"❌ I couldn't clean the chat. Error: {str(e)}\n\n"
+                "I might need more permissions in this group."
+            )
+    else:
+        # For private chats, just send a message
+        update.message.reply_text(
+            "🧹 To clean our conversation, you can use the 'Clear chat' option in Telegram's menu.\n\n"
+            "This is accessible by clicking the three dots in the top-right corner of our chat.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        logger.info(f"Chat cleanup instruction sent in {chat_id} (private chat)")
 
 def text_message_handler(update: Update, context: CallbackContext) -> None:
     """Handle text messages that are not commands"""

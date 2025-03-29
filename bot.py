@@ -27,6 +27,7 @@ from handlers import (
     tag_task_handler,
     search_tasks_handler,
     user_stats_handler,
+    clean_chat_handler,
     button_callback_handler,
     text_message_handler,
     error_handler,
@@ -116,6 +117,7 @@ def create_bot():
     dispatcher.add_handler(CommandHandler("priority", priority_task_handler))
     dispatcher.add_handler(CommandHandler("tag", tag_task_handler))
     dispatcher.add_handler(CommandHandler("search", search_tasks_handler))
+    dispatcher.add_handler(CommandHandler("clean", clean_chat_handler))
     
     # Developer command handlers
     dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))

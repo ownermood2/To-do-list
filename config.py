@@ -25,6 +25,7 @@ COMMANDS = {
     'tag': '🏷️ Add labels and categories to tasks',
     'search': '🔍 Find specific tasks',
     'export': '📤 Export your tasks',
+    'clean': '🧽 Clean up conversation history',
 }
 
 # Developer commands (hidden from regular users)
@@ -80,6 +81,7 @@ HELP_MESSAGE = (
     
     "*Group Collaboration:*\n"
     "• /join - Add this bot to your groups via invitation link\n"
+    "• /clean - Remove bot messages to keep your group chat tidy\n"
     "• All commands work in groups for team task management\n\n"
     
     "💡 *Pro Tip:* You can simply send a group invitation link directly to the bot to add it to your groups!"
@@ -102,6 +104,7 @@ GROUP_WELCOME_MESSAGE = (
     "• /tag - Categorize tasks by project or department\n"
     "• /today - See tasks due today for your team\n"
     "• /week - View upcoming tasks for better planning\n"
+    "• /clean - Keep the chat tidy by removing bot messages\n"
     "• /help - Discover all team productivity features\n\n"
     "💡 *Pro Tip:* Use @mentions in tasks to assign responsibilities to specific team members!"
 )

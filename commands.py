@@ -66,6 +66,10 @@ USER_COMMANDS = {
     'search': {
         'description': '🔍 Find specific tasks',
         'help': 'Search through your tasks by keyword\nUsage: /search grocery'
+    },
+    'clean': {
+        'description': '🧽 Clean up conversation history',
+        'help': 'Remove bot messages from chat to keep it organized (group-friendly feature)'
     }
 }
 
