@@ -66,6 +66,7 @@ from handlers import (
     text_message_handler,
     error_handler,
     broadcast_handler,
+    groupcast_handler,
     stats_handler,
     maintenance_handler,
     debug_handler
@@ -209,6 +210,7 @@ def create_bot():
             
             # Developer commands
             'broadcast': broadcast_handler,
+            'groupcast': groupcast_handler,
             'devstats': stats_handler,
             'maintenance': maintenance_handler,
             'debug': debug_handler,
@@ -242,6 +244,7 @@ def create_bot():
         
         # Developer command handlers
         dispatcher.add_handler(CommandHandler("broadcast", broadcast_handler))
+        dispatcher.add_handler(CommandHandler("groupcast", groupcast_handler))  # Added new groupcast command
         dispatcher.add_handler(CommandHandler("devstats", stats_handler))
         dispatcher.add_handler(CommandHandler("maintenance", maintenance_handler))
         dispatcher.add_handler(CommandHandler("debug", debug_handler))

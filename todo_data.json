@@ -1,1 +1,164 @@
-{}
+{
+  "-1002495209270": {
+    "type": "supergroup",
+    "tasks": [
+      {
+        "text": "Hello to all",
+        "done": false,
+        "date_added": "2025-03-29T15:24:48.456983",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T15:24:48.456993",
+        "reminder": 1743262796.1019657,
+        "reminded": true
+      }
+    ],
+    "settings": {
+      "reminder_default": false,
+      "reminder_time": 3600,
+      "sort_by": "date",
+      "theme": "default",
+      "notification_level": "all",
+      "time_format": "24h",
+      "categories": [
+        "Work",
+        "Personal",
+        "Shopping",
+        "Health",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "stats": {
+      "tasks_added": 0,
+      "tasks_completed": 0,
+      "last_active": "2025-03-29T15:24:48.455941",
+      "streaks": {
+        "current": 0,
+        "longest": 0,
+        "last_completion_date": null
+      }
+    }
+  },
+  "-1002373746982": {
+    "type": "supergroup",
+    "tasks": [
+      {
+        "text": "Hello Coffee baby",
+        "done": false,
+        "date_added": "2025-03-29T15:33:59.672593",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T15:33:59.672607",
+        "reminder": 1743263356.0976527
+      }
+    ],
+    "settings": {
+      "reminder_default": false,
+      "reminder_time": 3600,
+      "sort_by": "date",
+      "theme": "default",
+      "notification_level": "all",
+      "time_format": "24h",
+      "categories": [
+        "Work",
+        "Personal",
+        "Shopping",
+        "Health",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "stats": {
+      "tasks_added": 0,
+      "tasks_completed": 0,
+      "last_active": "2025-03-29T15:26:38.171638",
+      "streaks": {
+        "current": 0,
+        "longest": 0,
+        "last_completion_date": null
+      }
+    }
+  },
+  "6126321564": {
+    "type": "private",
+    "tasks": [],
+    "settings": {
+      "reminder_default": false,
+      "reminder_time": 3600,
+      "sort_by": "date",
+      "theme": "default",
+      "notification_level": "all",
+      "time_format": "24h",
+      "categories": [
+        "Work",
+        "Personal",
+        "Shopping",
+        "Health",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "stats": {
+      "tasks_added": 0,
+      "tasks_completed": 0,
+      "last_active": "2025-03-29T15:39:05.114610",
+      "streaks": {
+        "current": 0,
+        "longest": 0,
+        "last_completion_date": null
+      }
+    }
+  },
+  "7653153066": {
+    "type": "user",
+    "tasks": [
+      {
+        "text": "@Quiz_CV",
+        "done": false,
+        "date_added": "2025-03-29T15:40:26.851308",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T15:40:26.851319"
+      }
+    ],
+    "settings": {
+      "reminder_default": false,
+      "reminder_time": 3600,
+      "sort_by": "date",
+      "theme": "default",
+      "notification_level": "all",
+      "time_format": "24h",
+      "categories": [
+        "Work",
+        "Personal",
+        "Shopping",
+        "Health",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "stats": {
+      "tasks_added": 0,
+      "tasks_completed": 0,
+      "last_active": "2025-03-29T15:40:26.850529",
+      "streaks": {
+        "current": 0,
+        "longest": 0,
+        "last_completion_date": null
+      }
+    }
+  }
+}

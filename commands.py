@@ -79,6 +79,10 @@ DEVELOPER_COMMANDS = {
         'description': 'Send announcement to all users',
         'help': 'Send a message to all users and groups\nUsage: /broadcast Your message here'
     },
+    'groupcast': {
+        'description': 'Send announcement to a specific group',
+        'help': 'Send a message to a specific group chat\nUsage options:\n• `/groupcast GROUP_ID Your message here`\n• `/groupcast @group_username Your message here`\n• `/groupcast group_username Your message here`'
+    },
     'devstats': {
         'description': 'Show detailed bot statistics',
         'help': 'Display comprehensive usage statistics for the bot'

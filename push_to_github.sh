@@ -26,7 +26,7 @@ git add .
 
 # Commit changes
 echo "Committing changes..."
-git commit -m "Update TaskMaster Pro - Command fixes and improvements"
+git commit -m "Update TaskMaster Pro - Fix group joining and edited message handling"
 
 # Push changes to GitHub
 echo "Pushing to GitHub..."

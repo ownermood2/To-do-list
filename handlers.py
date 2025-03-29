@@ -4,6 +4,7 @@ import random
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import CallbackContext
+from telegram.error import BadRequest, Unauthorized, TimedOut, NetworkError
 
 # Chat type constants for better code readability
 CHAT_TYPE_PRIVATE = "private"
@@ -1033,7 +1034,8 @@ def join_group_handler(update: Update, context: CallbackContext) -> None:
                         invite_link = 'https://' + invite_link
             
             if invite_link:
-                update.message.reply_text(
+                # Send initial response to the user
+                response_msg = update.message.reply_text(
                     "🔄 I'm trying to join the group chat now! If I'm successful, I'll send a welcome message to the group.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -1042,13 +1044,114 @@ def join_group_handler(update: Update, context: CallbackContext) -> None:
                 user_id = update.effective_user.id
                 logger.info(f"User {user_id} shared a group invite link via /join command: {invite_link}")
                 
-                # TODO: Implement actual join mechanism when API allows
-                # For now, log this and respond appropriately
+                # Actually try to join the group
+                try:
+                    # Extract chat username or invite link for joining
+                    if 't.me/' in invite_link and not ('joinchat' in invite_link or '+' in invite_link):
+                        # For public groups: get the username after t.me/
+                        username_part = invite_link.split('t.me/')[-1].strip()
+                        
+                        # If username has additional path or query parameters, remove them
+                        if '/' in username_part:
+                            username_part = username_part.split('/')[0]
+                        if '?' in username_part:
+                            username_part = username_part.split('?')[0]
+                        
+                        # Add @ prefix if not already present
+                        if not username_part.startswith('@'):
+                            username_part = '@' + username_part
+                        
+                        # Try to join by username
+                        result = context.bot.get_chat(username_part)
+                        new_chat_id = result.id
+                        chat_title = result.title
+                        
+                        # Send welcome message
+                        context.bot.send_message(
+                            chat_id=new_chat_id,
+                            text=(
+                                "👋 *Hello everyone!*\n\n"
+                                "I'm *TaskMaster Pro*, a task management bot that can help this group organize tasks "
+                                "and send reminders. Use /help to see what I can do!\n\n"
+                                "I was invited to this group by a user. If you'd like to get started, "
+                                "just type /start to activate me in this group."
+                            ),
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        
+                        # Update the user who invited the bot
+                        update.message.reply_text(
+                            f"✅ I've successfully joined the group *{chat_title}*! I've sent a welcome message to introduce myself.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        logger.info(f"Bot successfully joined group {chat_title} (ID: {new_chat_id}) via username")
+                        
+                    else:
+                        # For private groups, use the invite link directly
+                        chat = context.bot.join_chat(invite_link)
+                        new_chat_id = chat.id
+                        chat_title = chat.title
+                        
+                        # Send welcome message
+                        context.bot.send_message(
+                            chat_id=new_chat_id,
+                            text=(
+                                "👋 *Hello everyone!*\n\n"
+                                "I'm *TaskMaster Pro*, a task management bot that can help this group organize tasks "
+                                "and send reminders. Use /help to see what I can do!\n\n"
+                                "I was invited to this group by a user. If you'd like to get started, "
+                                "just type /start to activate me in this group."
+                            ),
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        
+                        # Update the user who invited the bot
+                        update.message.reply_text(
+                            f"✅ I've successfully joined the group *{chat_title}*! I've sent a welcome message to introduce myself.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        logger.info(f"Bot successfully joined group {chat_title} (ID: {new_chat_id}) via invite link")
+                    
+                except BadRequest as e:
+                    error_msg = str(e).lower()
+                    if "chat not found" in error_msg:
+                        update.message.reply_text(
+                            "❌ I couldn't find that group. The link may be invalid or the group may no longer exist.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    elif "not enough rights" in error_msg or "insufficient rights" in error_msg:
+                        update.message.reply_text(
+                            "❌ I don't have sufficient permissions to join this group. Please ensure I have the right to join groups via invite links.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    elif "bot was blocked" in error_msg or "bot was kicked" in error_msg:
+                        update.message.reply_text(
+                            "❌ I've been blocked or kicked from this group previously. I cannot join it again unless an admin unblocks me.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    elif "invite link has expired" in error_msg or "invite link is invalid" in error_msg:
+                        update.message.reply_text(
+                            "❌ This invite link has expired or is invalid. Please get a fresh invite link and try again.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    else:
+                        update.message.reply_text(
+                            f"❌ Error joining group: {e}\n\nPlease try again with a valid invite link or check if I have permission to join.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    logger.error(f"Failed to join group via link {invite_link}: {e}")
                 
-                # Send confirmation to the developer
+                except Exception as e:
+                    update.message.reply_text(
+                        "❌ An unexpected error occurred while trying to join the group. Please try again later.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    logger.error(f"Unexpected error joining group via link {invite_link}: {e}")
+                
+                # Send detailed info to developers
                 if is_developer(user_id):
                     update.message.reply_text(
-                        "✅ *Developer Notice:* Bot will attempt to join the group. Check bot logs for details.",
+                        "✅ *Developer Notice:* Bot has attempted to join the group. Check bot logs for details.",
                         parse_mode=ParseMode.MARKDOWN
                     )
             else:
@@ -1523,7 +1626,14 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
         return
         
     chat_id = update.effective_chat.id
-    message_text = update.message.text.strip()
+    
+    # Handle both regular messages and edited messages
+    message = update.message or update.edited_message
+    if not message or not hasattr(message, 'text') or not message.text:
+        # Skip processing if there's no text in the message
+        return
+        
+    message_text = message.text.strip()
     
     # Check if waiting for custom reminder time
     if context.user_data and "custom_reminder_task" in context.user_data:
@@ -1746,10 +1856,35 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             )
         return
 
+def get_message(update: Update):
+    """Get the appropriate message object (regular or edited) from an update"""
+    return update.message or update.edited_message
+
+def reply_to_message(update: Update, text: str, **kwargs):
+    """Helper function to reply to either normal or edited messages"""
+    message = get_message(update)
+    if message:
+        try:
+            return message.reply_text(text, **kwargs)
+        except Exception as e:
+            # If replying to edited message fails, try to send a new message
+            logger.error(f"Error replying to message: {e}")
+            if update.effective_chat:
+                return update.effective_chat.send_message(text, **kwargs)
+    elif update.effective_chat:
+        # Fallback if no valid message
+        return update.effective_chat.send_message(text, **kwargs)
+    return None
+
 def error_handler(update: Update, context: CallbackContext) -> None:
     """Handle errors in the telegram bot"""
     error_message = str(context.error)
     logger.error(f"Update {update} caused error {error_message}")
+    
+    # Handle NoneType errors with edited_message or missing text
+    if "'NoneType' object has no attribute" in error_message:
+        # This is likely due to edited messages or similar, just log and ignore
+        return
     
     # Skip sending error messages for entity parsing errors in groups
     if "Can't parse entities" in error_message and update and update.effective_chat:
@@ -1787,7 +1922,7 @@ def error_handler(update: Update, context: CallbackContext) -> None:
 
 # Developer command handlers
 def broadcast_handler(update: Update, context: CallbackContext) -> None:
-    """Handle the /broadcast command - send a message to all users or to a specific group (developer only)"""
+    """Handle the /broadcast command - send a message to all users (developer only)"""
     user_id = update.effective_user.id
     
     if not is_developer(user_id):
@@ -1797,33 +1932,56 @@ def broadcast_handler(update: Update, context: CallbackContext) -> None:
     if not context.args:
         update.message.reply_text(
             "Please provide a message to broadcast after the /broadcast command.\n\n"
-            "Usage options:\n"
-            "• `/broadcast Your message` - Broadcast to all users\n"
-            "• `/broadcast -g GROUP_ID Your message` - Broadcast to a specific group"
+            "Usage: `/broadcast Your message`\n\n"
+            "To send to a specific group, use: `/groupcast GROUP_ID Your message`"
         )
         return
     
-    # Check if targeting a specific group
-    target_group_id = None
-    if context.args[0] == "-g" and len(context.args) >= 3:
-        try:
-            target_group_id = int(context.args[1])
-            broadcast_message = ' '.join(context.args[2:])
-        except ValueError:
-            update.message.reply_text("❌ Invalid group ID format. Must be a number.")
-            return
-    else:
-        broadcast_message = ' '.join(context.args)
+    # Send to all users
+    broadcast_message = ' '.join(context.args)
+    send_global_broadcast(update, context, broadcast_message)
     
-    if target_group_id:
-        # Single group broadcast
-        send_group_broadcast(update, context, target_group_id, broadcast_message)
+def groupcast_handler(update: Update, context: CallbackContext) -> None:
+    """Handle the /groupcast command - send a message to a specific group (developer only)"""
+    user_id = update.effective_user.id
+    
+    if not is_developer(user_id):
+        update.message.reply_text("❌ This command is only available to developers.")
+        return
+    
+    if len(context.args) < 2:
+        update.message.reply_text(
+            "Please provide a group ID/username and message.\n\n"
+            "Usage examples:\n"
+            "• `/groupcast GROUP_ID Your message`\n"
+            "• `/groupcast @group_username Your message`\n"
+            "• `/groupcast group_username Your message`"
+        )
+        return
+    
+    # First argument is the group identifier (ID or username)
+    group_identifier = context.args[0]
+    
+    # Rest is the message
+    message = ' '.join(context.args[1:])
+    
+    # Check if it's a group ID (numeric) or username
+    if group_identifier.isdigit() or (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
+        # It's a numeric ID
+        group_id = int(group_identifier)
+        send_group_broadcast_by_id(update, context, group_id, message)
     else:
-        # All users broadcast
-        send_global_broadcast(update, context, broadcast_message)
+        # It's a username - remove @ if present
+        if group_identifier.startswith('@'):
+            group_username = group_identifier[1:]
+        else:
+            group_username = group_identifier
+            
+        send_group_broadcast_by_username(update, context, group_username, message)
 
-def send_group_broadcast(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
-    """Send a broadcast message to a specific group"""
+# Define helper functions for group broadcasts
+def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
+    """Send a broadcast message to a specific group by ID"""
     try:
         # First check if this is a valid group the bot knows about
         chat_ids = get_all_chat_ids()
@@ -1859,11 +2017,11 @@ def send_group_broadcast(update: Update, context: CallbackContext, group_id: int
         # Update status
         if success:
             update.message.reply_text(
-                f"✅ Successfully sent announcement to group {group_id}."
+                f"✅ Successfully sent announcement to group with ID {group_id}."
             )
         else:
             update.message.reply_text(
-                f"❌ Failed to send announcement to group {group_id}. Check logs for details."
+                f"❌ Failed to send announcement to group with ID {group_id}. Check logs for details."
             )
     
     except Exception as e:
@@ -1871,6 +2029,53 @@ def send_group_broadcast(update: Update, context: CallbackContext, group_id: int
         update.message.reply_text(
             "❌ An error occurred while trying to send the broadcast."
         )
+
+def send_group_broadcast_by_username(update: Update, context: CallbackContext, group_username: str, message: str) -> None:
+    """Send a broadcast message to a specific group by username"""
+    try:
+        # Attempt to send message directly to the username
+        success = False
+        try:
+            # Clean up the username if needed
+            if not group_username.startswith('@'):
+                chat_username = '@' + group_username
+            else:
+                chat_username = group_username
+                
+            sent_message = context.bot.send_message(
+                chat_id=chat_username,
+                text=f"📣 *Announcement*\n\n{message}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            success = True
+            
+            # Get the actual chat ID for reporting
+            actual_chat_id = sent_message.chat_id
+            
+        except Exception as e:
+            logger.error(f"Failed to send broadcast to group @{group_username}: {e}")
+            
+        # Update status
+        if success:
+            update.message.reply_text(
+                f"✅ Successfully sent announcement to group @{group_username}."
+            )
+        else:
+            update.message.reply_text(
+                f"❌ Failed to send announcement to group @{group_username}.\n"
+                f"Make sure the bot is a member of this group and has permission to send messages."
+            )
+    
+    except Exception as e:
+        logger.error(f"Error in targeted broadcast: {e}")
+        update.message.reply_text(
+            "❌ An error occurred while trying to send the broadcast."
+        )
+
+# Keep the original function for backward compatibility
+def send_group_broadcast(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
+    """Send a broadcast message to a specific group (legacy method)"""
+    send_group_broadcast_by_id(update, context, group_id, message)
 
 def send_global_broadcast(update: Update, context: CallbackContext, broadcast_message: str) -> None:
     """Send a broadcast message to all chats"""
