@@ -3,6 +3,13 @@
 Telegram Bot 24/7 Runner Script
 This script ensures the Telegram bot stays running continuously, restarting it
 if it crashes or is terminated for any reason.
+
+Enhanced features:
+- Intelligent restart mechanisms with exponential backoff
+- Built-in health checks and process monitoring
+- Automatic recovery from network failures
+- Detailed logging of uptime and error conditions
+- Memory leak protection with scheduled restarts
 """
 
 import os
@@ -139,6 +146,55 @@ def monitor_bot(process):
         logger.error(f"Error monitoring bot: {e}")
         return False
 
+def check_internet_connection():
+    """Check if the internet connection is working"""
+    try:
+        # Try to connect to Telegram's API server with a timeout
+        import socket
+        socket.create_connection(("api.telegram.org", 443), timeout=10)
+        return True
+    except OSError:
+        return False
+
+def check_memory_usage():
+    """Check the process memory usage"""
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
+        
+        logger.info(f"Current memory usage: {memory_mb:.2f} MB")
+        
+        # Return True if memory usage is too high (>500MB)
+        return memory_mb > 500
+    except:
+        return False  # Can't check, assume it's fine
+
+def scheduled_restart(process):
+    """Perform a scheduled restart for maintenance"""
+    logger.info("Performing scheduled maintenance restart...")
+    
+    try:
+        # Try to terminate gracefully
+        process.terminate()
+        
+        # Wait up to 30 seconds for graceful termination
+        for _ in range(30):
+            if process.poll() is not None:
+                break
+            time.sleep(1)
+            
+        # If still running, force kill
+        if process.poll() is None:
+            logger.warning("Process didn't terminate gracefully, forcing kill")
+            process.kill()
+            
+        return True
+    except Exception as e:
+        logger.error(f"Error during scheduled restart: {e}")
+        return False
+
 def main():
     """Main runner function that keeps the bot alive"""
     global current_process, restarts
@@ -150,7 +206,17 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # Variables for scheduled maintenance
+    last_scheduled_restart = time.time()
+    restart_interval = 24 * 3600  # Restart once every 24 hours for maintenance
+    
     while True:
+        # Check internet connection first
+        if not check_internet_connection():
+            logger.warning("Internet connection down, waiting for connectivity...")
+            time.sleep(60)  # Check every minute
+            continue
+            
         # Start bot if not running
         if current_process is None or current_process.poll() is not None:
             # If this is a restart, record it and calculate backoff
@@ -171,6 +237,24 @@ def main():
                 logger.error("Failed to start bot process, waiting 30 seconds to retry...")
                 time.sleep(30)
                 continue
+        
+        # Check for scheduled maintenance restart
+        current_time = time.time()
+        if current_time - last_scheduled_restart > restart_interval:
+            logger.info("Scheduled maintenance time reached")
+            if scheduled_restart(current_process):
+                last_scheduled_restart = current_time
+                current_process = None
+                time.sleep(10)  # Brief delay before restart
+                continue
+        
+        # Check for memory leaks
+        if check_memory_usage():
+            logger.warning("Memory usage is high, performing restart...")
+            scheduled_restart(current_process)
+            current_process = None
+            time.sleep(10)  # Brief delay before restart
+            continue
         
         # Monitor the bot
         if not monitor_bot(current_process):

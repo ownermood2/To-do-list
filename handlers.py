@@ -886,6 +886,151 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             parse_mode=ParseMode.MARKDOWN
         )
         
+    # Group broadcast handling
+    elif data.startswith("groupcast_select:"):
+        # Only developers can use this
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can send broadcasts.")
+            return
+            
+        # Extract group ID
+        group_id = int(data.split(":", 1)[1])
+        
+        # Store the selected group ID in user_data for the next step
+        if not context.user_data:
+            context.user_data = {}
+        context.user_data['groupcast_state'] = 'entering_message'
+        context.user_data['selected_group_id'] = group_id
+        
+        # Try to get the group name
+        group_name = "the selected group"
+        try:
+            chat_info = context.bot.get_chat(group_id)
+            if chat_info.username:
+                group_name = f"@{chat_info.username}"
+            else:
+                group_name = chat_info.title or f"group with ID {group_id}"
+        except Exception:
+            pass
+        
+        # Ask for the message to send
+        query.edit_message_text(
+            f"📝 *Enter Broadcast Message*\n\n"
+            f"Please reply to this message with the announcement you want to send to *{group_name}*.\n\n"
+            f"Your message will be sent as-is with Markdown formatting support.\n"
+            f"Type `cancel` to cancel.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data == "groupcast_confirm":
+        # User confirmed sending the broadcast message
+        # Only developers can use this
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can send broadcasts.")
+            return
+            
+        # Make sure we have all the data we need
+        if ('selected_group_id' not in context.user_data or 
+            'groupcast_message' not in context.user_data or
+            context.user_data.get('groupcast_state') != 'confirming_message'):
+            query.edit_message_text(
+                "⚠️ Error: Broadcast data missing. Please try again with /groupcast command.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            # Clean up user_data
+            if 'groupcast_state' in context.user_data:
+                del context.user_data['groupcast_state']
+            if 'selected_group_id' in context.user_data:
+                del context.user_data['selected_group_id']
+            if 'groupcast_message' in context.user_data:
+                del context.user_data['groupcast_message']
+            return
+            
+        # Get the data from user_data
+        group_id = context.user_data.get('selected_group_id')
+        message = context.user_data.get('groupcast_message')
+        
+        # Send the broadcast to the selected group
+        result = send_group_broadcast_by_id(update, context, group_id, message)
+        
+        if result:
+            query.edit_message_text(
+                "✅ Broadcast message sent successfully!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            query.edit_message_text(
+                "❌ Failed to send broadcast message. Please check if the bot is still a member of the group.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        # Clean up user_data
+        if 'groupcast_state' in context.user_data:
+            del context.user_data['groupcast_state']
+        if 'selected_group_id' in context.user_data:
+            del context.user_data['selected_group_id']
+        if 'groupcast_message' in context.user_data:
+            del context.user_data['groupcast_message']
+            
+    elif data == "groupcast_edit":
+        # User wants to edit the message before sending
+        # Only developers can use this
+        if not is_developer(user_id):
+            query.answer("⚠️ Only developers can send broadcasts.")
+            return
+            
+        # Make sure we have the required data
+        if 'selected_group_id' not in context.user_data:
+            query.edit_message_text(
+                "⚠️ Error: Group ID missing. Please try again with /groupcast command.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            # Clean up user_data
+            if 'groupcast_state' in context.user_data:
+                del context.user_data['groupcast_state']
+            if 'groupcast_message' in context.user_data:
+                del context.user_data['groupcast_message']
+            return
+            
+        # Get the group ID and possibly the group name
+        group_id = context.user_data.get('selected_group_id')
+        group_name = "the selected group"
+        try:
+            chat_info = context.bot.get_chat(group_id)
+            if chat_info.username:
+                group_name = f"@{chat_info.username}"
+            else:
+                group_name = chat_info.title or f"group with ID {group_id}"
+        except Exception:
+            pass
+            
+        # Change state back to entering message
+        context.user_data['groupcast_state'] = 'entering_message'
+        # Keep the group ID
+        
+        # Show message asking for new text
+        query.edit_message_text(
+            f"📝 *Edit Broadcast Message*\n\n"
+            f"Please reply with your new announcement for *{group_name}*.\n\n"
+            f"Your message will be sent as-is with Markdown formatting support.\n"
+            f"Type `cancel` to cancel.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    elif data == "groupcast_cancel":
+        # Cancel groupcast
+        if 'groupcast_state' in context.user_data:
+            del context.user_data['groupcast_state']
+        if 'selected_group_id' in context.user_data:
+            del context.user_data['selected_group_id']
+        if 'groupcast_message' in context.user_data:
+            del context.user_data['groupcast_message']
+            
+        query.edit_message_text(
+            "⏹️ Group broadcast cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
     elif data == "group_help":
         # Display helpful information for groups
         group_commands = [
@@ -1896,6 +2041,72 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
         
     message_text = message.text.strip()
     
+    # Check if waiting for groupcast message (developer feature)
+    if context.user_data and context.user_data.get('groupcast_state') == 'entering_message':
+        # Only developers can send broadcasts
+        if not is_developer(update.effective_user.id):
+            update.message.reply_text("❌ Only developers can send broadcasts.")
+            if 'groupcast_state' in context.user_data:
+                del context.user_data['groupcast_state']
+            if 'selected_group_id' in context.user_data:
+                del context.user_data['selected_group_id']
+            return
+            
+        # Check for cancel
+        if message_text.lower() == "cancel":
+            update.message.reply_text("⏹️ Group broadcast cancelled.")
+            if 'groupcast_state' in context.user_data:
+                del context.user_data['groupcast_state']
+            if 'selected_group_id' in context.user_data:
+                del context.user_data['selected_group_id']
+            return
+            
+        # Get the group ID from user_data
+        group_id = context.user_data.get('selected_group_id')
+        if not group_id:
+            update.message.reply_text("❌ Error: Group ID not found. Please try sending the broadcast again.")
+            if 'groupcast_state' in context.user_data:
+                del context.user_data['groupcast_state']
+            return
+        
+        # Try to get the group name for display
+        group_name = "the selected group"
+        try:
+            chat_info = context.bot.get_chat(group_id)
+            if chat_info.username:
+                group_name = f"@{chat_info.username}"
+            else:
+                group_name = chat_info.title or f"group with ID {group_id}"
+        except Exception as e:
+            logger.error(f"Error getting group info for confirmation: {e}")
+        
+        # Store the message in user_data for the confirmation step
+        context.user_data['groupcast_message'] = message_text
+        context.user_data['groupcast_state'] = 'confirming_message'
+        
+        # Create confirmation keyboard
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Yes, send it", callback_data=f"groupcast_confirm"),
+                InlineKeyboardButton("✏️ Edit message", callback_data=f"groupcast_edit")
+            ],
+            [
+                InlineKeyboardButton("❌ Cancel", callback_data="groupcast_cancel")
+            ]
+        ]
+        
+        # Show confirmation message with message preview
+        update.message.reply_text(
+            f"📢 *Broadcast Confirmation*\n\n"
+            f"You're about to send the following announcement to *{group_name}*:\n\n"
+            f"---\n{message_text}\n---\n\n"
+            f"Is this correct?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        return
+    
     # Check if waiting for custom reminder time
     if context.user_data and "custom_reminder_task" in context.user_data:
         task_index = context.user_data["custom_reminder_task"]
@@ -2232,18 +2443,105 @@ def groupcast_handler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text("❌ This command is only available to developers.")
         return
     
-    if len(context.args) < 2:
-        update.message.reply_text(
-            "Please provide a group ID/username and message.\n\n"
-            "Usage examples:\n"
-            "• `/groupcast GROUP_ID Your message`\n"
-            "• `/groupcast @group_username Your message`\n"
-            "• `/groupcast group_username Your message`"
-        )
+    # Check if there are enough arguments
+    if not context.args or (len(context.args) == 1 and context.args[0].lower() == "help"):
+        # Show help menu with known groups if available
+        known_groups = []
+        known_group_usernames = []
+        
+        # Get all known chats from database
+        chat_ids = get_all_chat_ids()
+        
+        # Try to get information for each chat
+        for chat_id_str in chat_ids:
+            try:
+                chat_id = int(chat_id_str)
+                chat_data = get_chat_data(chat_id)
+                
+                # Only include groups and supergroups
+                chat_type = chat_data.get('chat_type', '')
+                if chat_type in [CHAT_TYPE_GROUP, CHAT_TYPE_SUPERGROUP]:
+                    # Try to get chat info from Telegram
+                    try:
+                        chat_info = context.bot.get_chat(chat_id)
+                        if chat_info.username:
+                            group_name = f"@{chat_info.username}"
+                            known_group_usernames.append((group_name, chat_id))
+                        else:
+                            group_name = chat_info.title or f"Group {chat_id}"
+                        
+                        known_groups.append((group_name, chat_id))
+                    except Exception:
+                        # Couldn't get chat info, but we know it's a group
+                        known_groups.append((f"Group {chat_id}", chat_id))
+            except Exception as e:
+                logger.warning(f"Error getting info for chat {chat_id_str}: {e}")
+        
+        # Create inline keyboard with known groups
+        keyboard = []
+        
+        # First add groups with usernames (easier to identify)
+        for group_name, chat_id in sorted(known_group_usernames, key=lambda x: x[0].lower()):
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{group_name}", 
+                    callback_data=f"groupcast_select:{chat_id}"
+                )
+            ])
+        
+        # Then add groups without usernames
+        for group_name, chat_id in sorted(known_groups, key=lambda x: x[0].lower()):
+            # Skip groups that are already added (those with usernames)
+            if any(chat_id == x[1] for x in known_group_usernames):
+                continue
+                
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{group_name}", 
+                    callback_data=f"groupcast_select:{chat_id}"
+                )
+            ])
+        
+        # Add a cancel button
+        keyboard.append([
+            InlineKeyboardButton("❌ Cancel", callback_data="groupcast_cancel")
+        ])
+        
+        # Store user's current state in user_data
+        if not context.user_data:
+            context.user_data = {}
+        context.user_data['groupcast_state'] = 'selecting_group'
+        
+        if keyboard and len(keyboard) > 1:  # More than just the cancel button
+            update.message.reply_text(
+                "📢 *Group Broadcast*\n\n"
+                "Select a group to send your announcement to, or use the command with a group ID/username and message:\n\n"
+                "• `/groupcast GROUP_ID Your message`\n"
+                "• `/groupcast @group_username Your message`",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            # No known groups or error fetching them
+            update.message.reply_text(
+                "📢 *Group Broadcast*\n\n"
+                "No groups found that the bot is a member of. Please provide a group ID/username and message:\n\n"
+                "• `/groupcast GROUP_ID Your message`\n"
+                "• `/groupcast @group_username Your message`\n"
+                "• `/groupcast group_username Your message`",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
     
     # First argument is the group identifier (ID or username)
     group_identifier = context.args[0]
+    
+    # Make sure there's at least one word in the message
+    if len(context.args) < 2:
+        update.message.reply_text(
+            "⚠️ Please provide a message to send to the group after the group ID/username."
+        )
+        return
     
     # Rest is the message
     message = ' '.join(context.args[1:])
@@ -2263,8 +2561,19 @@ def groupcast_handler(update: Update, context: CallbackContext) -> None:
         send_group_broadcast_by_username(update, context, group_username, message)
 
 # Define helper functions for group broadcasts
-def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
-    """Send a broadcast message to a specific group by ID"""
+def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_id: int, message: str) -> bool:
+    """
+    Send a broadcast message to a specific group by ID
+    
+    Args:
+        update: The update object
+        context: The context object
+        group_id: The ID of the group to send to
+        message: The message to send
+        
+    Returns:
+        bool: True if the message was sent successfully, False otherwise
+    """
     try:
         # First check if this is a valid group the bot knows about
         chat_ids = get_all_chat_ids()
@@ -2280,10 +2589,15 @@ def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_i
                 chat_exists = False
                 
             if not chat_exists:
-                update.message.reply_text(
-                    f"⚠️ Group ID {group_id} is not known to the bot or the bot cannot access the group."
-                )
-                return
+                if update.callback_query:
+                    # Called from a callback
+                    return False
+                else:
+                    # Called directly from a message
+                    update.message.reply_text(
+                        f"⚠️ Group ID {group_id} is not known to the bot or the bot cannot access the group."
+                    )
+                    return False
         
         # Generate a broadcast ID for this group message
         broadcast_id = f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -2314,28 +2628,45 @@ def send_group_broadcast_by_id(update: Update, context: CallbackContext, group_i
             }
         except Exception as e:
             logger.error(f"Failed to send broadcast to group {group_id}: {e}")
+            success = False
             
-        # Update status
-        if success:
-            update.message.reply_text(
-                f"✅ Successfully sent announcement to group with ID {group_id}.\n\n"
-                f"Broadcast ID: `{broadcast_id}`\n"
-                f"Use /delbroadcast {broadcast_id} to delete this announcement.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            update.message.reply_text(
-                f"❌ Failed to send announcement to group with ID {group_id}. Check logs for details."
-            )
+        # Update status only if called directly from a message handler, not a callback
+        if not update.callback_query:
+            if success:
+                update.message.reply_text(
+                    f"✅ Successfully sent announcement to group with ID {group_id}.\n\n"
+                    f"Broadcast ID: `{broadcast_id}`\n"
+                    f"Use /delbroadcast {broadcast_id} to delete this announcement.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                update.message.reply_text(
+                    f"❌ Failed to send announcement to group with ID {group_id}. Check logs for details."
+                )
+        
+        return success
     
     except Exception as e:
         logger.error(f"Error in targeted broadcast: {e}")
-        update.message.reply_text(
-            "❌ An error occurred while trying to send the broadcast."
-        )
+        if not update.callback_query:
+            update.message.reply_text(
+                "❌ An error occurred while trying to send the broadcast."
+            )
+        return False
 
-def send_group_broadcast_by_username(update: Update, context: CallbackContext, group_username: str, message: str) -> None:
-    """Send a broadcast message to a specific group by username"""
+def send_group_broadcast_by_username(update: Update, context: CallbackContext, group_username: str, message: str) -> bool:
+    """
+    Send a broadcast message to a specific group by username
+    
+    Args:
+        update: The update object
+        context: The context object
+        group_username: The username of the group to send to
+        message: The message to send
+        
+    Returns:
+        bool: True if the message was sent successfully, False otherwise
+    """
     try:
         # Attempt to send message directly to the username
         success = False
@@ -2378,31 +2709,48 @@ def send_group_broadcast_by_username(update: Update, context: CallbackContext, g
             
         except Exception as e:
             logger.error(f"Failed to send broadcast to group @{group_username}: {e}")
+            success = False
             
-        # Update status
-        if success:
-            update.message.reply_text(
-                f"✅ Successfully sent announcement to group @{group_username}.\n\n"
-                f"Broadcast ID: `{broadcast_id}`\n"
-                f"Use /delbroadcast {broadcast_id} to delete this announcement.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            update.message.reply_text(
-                f"❌ Failed to send announcement to group @{group_username}.\n"
-                f"Make sure the bot is a member of this group and has permission to send messages."
-            )
+        # Update status only if called directly from a message handler, not a callback
+        if not update.callback_query:
+            if success:
+                update.message.reply_text(
+                    f"✅ Successfully sent announcement to group @{group_username}.\n\n"
+                    f"Broadcast ID: `{broadcast_id}`\n"
+                    f"Use /delbroadcast {broadcast_id} to delete this announcement.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                update.message.reply_text(
+                    f"❌ Failed to send announcement to group @{group_username}.\n"
+                    f"Make sure the bot is a member of this group and has permission to send messages."
+                )
+        
+        return success
     
     except Exception as e:
         logger.error(f"Error in targeted broadcast: {e}")
-        update.message.reply_text(
-            "❌ An error occurred while trying to send the broadcast."
-        )
+        if not update.callback_query:
+            update.message.reply_text(
+                "❌ An error occurred while trying to send the broadcast."
+            )
+        return False
 
 # Keep the original function for backward compatibility
-def send_group_broadcast(update: Update, context: CallbackContext, group_id: int, message: str) -> None:
-    """Send a broadcast message to a specific group (legacy method)"""
-    send_group_broadcast_by_id(update, context, group_id, message)
+def send_group_broadcast(update: Update, context: CallbackContext, group_id: int, message: str) -> bool:
+    """
+    Send a broadcast message to a specific group (legacy method)
+    
+    Args:
+        update: The update object
+        context: The context object
+        group_id: The ID of the group to send to
+        message: The message to send
+        
+    Returns:
+        bool: True if the message was sent successfully, False otherwise
+    """
+    return send_group_broadcast_by_id(update, context, group_id, message)
 
 def send_global_broadcast(update: Update, context: CallbackContext, broadcast_message: str) -> None:
     """Send a broadcast message to all chats"""
