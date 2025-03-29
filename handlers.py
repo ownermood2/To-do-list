@@ -717,7 +717,7 @@ def join_group_handler(update: Update, context: CallbackContext) -> None:
     
     # Check if message contains a valid Telegram group invite link
     invite_link = None
-    if 't.me/' in message_text and ('joinchat/' in message_text or '+' in message_text):
+    if 't.me/' in message_text:
         try:
             # Extract the invite link
             if 'joinchat/' in message_text:
@@ -727,9 +727,16 @@ def join_group_handler(update: Update, context: CallbackContext) -> None:
                     invite_link = message_text[start_index:].split()[0].strip()
                     if not invite_link.startswith('https://'):
                         invite_link = 'https://' + invite_link
-            else:
+            elif '+' in message_text:
                 # New format: https://t.me/+XXXX
                 start_index = message_text.find('t.me/+')
+                if start_index != -1:
+                    invite_link = message_text[start_index:].split()[0].strip()
+                    if not invite_link.startswith('https://'):
+                        invite_link = 'https://' + invite_link
+            else:
+                # Public group/channel format: https://t.me/groupname
+                start_index = message_text.find('t.me/')
                 if start_index != -1:
                     invite_link = message_text[start_index:].split()[0].strip()
                     if not invite_link.startswith('https://'):
@@ -766,7 +773,8 @@ def join_group_handler(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(
             "⚠️ That doesn't look like a valid Telegram group invite link. Please send a link in the format:\n"
             "• https://t.me/joinchat/AbCdEfGhIjKlMnO\n"
-            "• https://t.me/+AbCdEfGhIjKlMnO",
+            "• https://t.me/+AbCdEfGhIjKlMnO\n"
+            "• https://t.me/groupname",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -1145,9 +1153,11 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
     message_text = update.message.text.strip()
     
     # Check if message contains a Telegram group invite link
-    if 't.me/' in message_text and ('joinchat/' in message_text or '+' in message_text):
+    if 't.me/' in message_text:
         try:
             # Extract the invite link
+            invite_link = None
+            
             if 'joinchat/' in message_text:
                 # Old format: https://t.me/joinchat/XXXX
                 start_index = message_text.find('t.me/joinchat/')
@@ -1155,34 +1165,44 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
                     invite_link = message_text[start_index:].split()[0].strip()
                     if not invite_link.startswith('https://'):
                         invite_link = 'https://' + invite_link
-            else:
+            elif '+' in message_text:
                 # New format: https://t.me/+XXXX
                 start_index = message_text.find('t.me/+')
                 if start_index != -1:
                     invite_link = message_text[start_index:].split()[0].strip()
                     if not invite_link.startswith('https://'):
                         invite_link = 'https://' + invite_link
+            else:
+                # Public group/channel format: https://t.me/groupname
+                start_index = message_text.find('t.me/')
+                if start_index != -1:
+                    invite_link = message_text[start_index:].split()[0].strip()
+                    if not invite_link.startswith('https://'):
+                        invite_link = 'https://' + invite_link
             
-            update.message.reply_text(
-                "🔄 I'm trying to join the group chat now! If I'm successful, I'll send a welcome message to the group.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-            # Log the attempt
-            user_id = update.effective_user.id
-            logger.info(f"User {user_id} shared a group invite link: {invite_link}")
-            
-            # TODO: Implement actual join mechanism when API allows
-            # For now, log this and respond appropriately
-            
-            # Send confirmation to the developer
-            if is_developer(user_id):
+            if invite_link:
                 update.message.reply_text(
-                    "✅ *Developer Notice:* Bot will attempt to join the group. Check bot logs for details.",
+                    "🔄 I'm trying to join the group chat now! If I'm successful, I'll send a welcome message to the group.",
                     parse_mode=ParseMode.MARKDOWN
                 )
-            
-            return
+                
+                # Log the attempt
+                user_id = update.effective_user.id
+                logger.info(f"User {user_id} shared a group invite link: {invite_link}")
+                
+                # TODO: Implement actual join mechanism when API allows
+                # For now, log this and respond appropriately
+                
+                # Send confirmation to the developer
+                if is_developer(user_id):
+                    update.message.reply_text(
+                        "✅ *Developer Notice:* Bot will attempt to join the group. Check bot logs for details.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                
+                return
+            else:
+                raise ValueError("Could not extract invite link")
         except Exception as e:
             logger.error(f"Error processing group invite link: {e}")
             update.message.reply_text(
