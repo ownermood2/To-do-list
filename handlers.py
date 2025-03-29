@@ -1504,8 +1504,9 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
     # Check if we're in a group chat
     is_group = update.effective_chat.type in ["group", "supergroup"]
     
-    # Check if it looks like a task
-    if len(message_text) > 3 and not message_text.startswith('/'):
+    # Only prompt for task creation in private chats, not in groups
+    # In groups, users must use explicit commands like /add to create tasks
+    if not is_group and len(message_text) > 3 and not message_text.startswith('/'):
         # Ask if user wants to add this as a task with smart buttons
         keyboard = [
             [
@@ -1517,18 +1518,20 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             ]
         ]
         
-        # In groups, add options to assign the task
-        if is_group:
-            keyboard.append([
-                InlineKeyboardButton("👥 Task for everyone", callback_data=f"assign_group:{message_text[:200]}")
-            ])
-        
         update.message.reply_text(
-            "📝 Did you want to add this as a new task?" if not is_group else 
-            "📝 Did you want to add this as a new group task?",
+            "📝 Did you want to add this as a new task?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
+    elif is_group and len(message_text) > 3 and not message_text.startswith('/'):
+        # In groups, just provide information about using commands for tasks
+        # Only respond occasionally to avoid being too chatty
+        import random
+        if random.random() < 0.1:  # Only respond 10% of the time to avoid spam
+            update.message.reply_text(
+                "🔹 To add tasks, use commands like */add*, */list* or */help*.",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
 
 def error_handler(update: Update, context: CallbackContext) -> None:

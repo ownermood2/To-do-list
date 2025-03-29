@@ -44,7 +44,20 @@
         "notes": "",
         "progress": 0,
         "attachments": [],
-        "updated_at": "2025-03-29T14:00:44.117465"
+        "updated_at": "2025-03-29T14:00:44.117465",
+        "reminder": 1743260445.7171466
+      },
+      {
+        "text": "Ready For the Quiz At 8:30pm [@Quiz_CV]",
+        "done": false,
+        "date_added": "2025-03-29T14:30:42.105286",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T14:30:42.105296"
       }
     ],
     "settings": {
@@ -88,7 +101,35 @@
         "progress": 0,
         "attachments": [],
         "updated_at": "2025-03-29T14:08:40.782896",
-        "reminder": 1743258254.002747
+        "reminder": 1743258254.002747,
+        "reminded": true
+      },
+      {
+        "text": "hello",
+        "done": false,
+        "date_added": "2025-03-29T14:15:03.983073",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T14:15:03.983168",
+        "reminder": 1743258607.4066503,
+        "reminded": true
+      },
+      {
+        "text": "@mentions Hello",
+        "done": false,
+        "date_added": "2025-03-29T14:26:14.899755",
+        "active": true,
+        "priority": "normal",
+        "category": "Group Task",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T14:26:14.899765",
+        "reminder": 1743259279.744705
       }
     ],
     "settings": {
