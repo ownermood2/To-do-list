@@ -129,7 +129,8 @@
         "progress": 0,
         "attachments": [],
         "updated_at": "2025-03-29T14:26:14.899765",
-        "reminder": 1743259279.744705
+        "reminder": 1743259279.744705,
+        "reminded": true
       }
     ],
     "settings": {
