@@ -48,28 +48,58 @@ def get_confirmation_keyboard(action: str) -> List[List[InlineKeyboardButton]]:
 
 def get_time_selection_keyboard(task_index: int) -> List[List[InlineKeyboardButton]]:
     """Generate keyboard for selecting reminder time"""
-    # Define common reminder times (in minutes)
+    # Define common reminder times (in minutes) with more friendly labels
     times = [
-        ("15m", 15),
-        ("30m", 30),
-        ("1h", 60),
-        ("3h", 180),
-        ("6h", 360),
-        ("12h", 720),
-        ("24h", 1440)
+        ("⏱️ 15 minutes", 15),
+        ("⏱️ 30 minutes", 30),
+        ("🕐 1 hour", 60),
+        ("🕒 3 hours", 180),
+        ("🕕 6 hours", 360),
+        ("🕛 12 hours", 720),
+        ("📅 Tomorrow", 1440)
+    ]
+    
+    # Define special time options for group tasks
+    group_times = [
+        ("⏰ End of day", 0),  # Special value for end of day
+        ("📆 This weekend", -1),  # Special value for weekend
+        ("🗓️ Next week", -2)   # Special value for next week
     ]
     
     keyboard = []
-    row = []
     
-    # Create buttons for each time option
-    for i, (label, minutes) in enumerate(times):
-        row.append(InlineKeyboardButton(label, callback_data=f"time:{task_index}:{minutes}"))
-        
-        # Create new row every 3 buttons
-        if (i + 1) % 3 == 0 or i == len(times) - 1:
-            keyboard.append(row)
-            row = []
+    # First section: Quick options (most common)
+    keyboard.append([
+        InlineKeyboardButton(times[0][0], callback_data=f"time:{task_index}:{times[0][1]}"),
+        InlineKeyboardButton(times[1][0], callback_data=f"time:{task_index}:{times[1][1]}")
+    ])
+    
+    keyboard.append([
+        InlineKeyboardButton(times[2][0], callback_data=f"time:{task_index}:{times[2][1]}"),
+        InlineKeyboardButton(times[3][0], callback_data=f"time:{task_index}:{times[3][1]}")
+    ])
+    
+    # Second section: Longer periods
+    keyboard.append([
+        InlineKeyboardButton(times[4][0], callback_data=f"time:{task_index}:{times[4][1]}"),
+        InlineKeyboardButton(times[5][0], callback_data=f"time:{task_index}:{times[5][1]}")
+    ])
+    
+    # Third section: Special timing options (good for groups)
+    keyboard.append([InlineKeyboardButton(times[6][0], callback_data=f"time:{task_index}:{times[6][1]}")])
+    
+    keyboard.append([
+        InlineKeyboardButton(group_times[0][0], callback_data=f"special_time:{task_index}:{group_times[0][1]}"),
+        InlineKeyboardButton(group_times[1][0], callback_data=f"special_time:{task_index}:{group_times[1][1]}")
+    ])
+    
+    keyboard.append([InlineKeyboardButton(group_times[2][0], callback_data=f"special_time:{task_index}:{group_times[2][1]}")])
+    
+    # Add custom time option
+    keyboard.append([InlineKeyboardButton("⚙️ Custom time", callback_data=f"custom_time:{task_index}")])
+    
+    # Add cancel option (important for UX)
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_reminder")])
     
     return keyboard
 

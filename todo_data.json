@@ -8,13 +8,70 @@
         "date_added": "2025-03-29T13:16:46.416807",
         "active": true,
         "reminder": 1743255119.7625003,
-        "reminded": true
+        "reminded": true,
+        "priority": "high",
+        "updated_at": "2025-03-29T14:01:03.316106"
       }
     ],
     "settings": {
       "reminder_default": false,
       "reminder_time": 3600,
       "sort_by": "date"
+    }
+  },
+  "-1002495209270": {
+    "type": "user",
+    "tasks": [
+      {
+        "text": "Start",
+        "done": true,
+        "date_added": "2025-03-29T14:00:01.560454",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T14:00:01.560464"
+      },
+      {
+        "text": "Ready For Quiz At 8:30 pm [@Quiz_CV]",
+        "done": false,
+        "date_added": "2025-03-29T14:00:44.117456",
+        "active": true,
+        "priority": "normal",
+        "category": "default",
+        "notes": "",
+        "progress": 0,
+        "attachments": [],
+        "updated_at": "2025-03-29T14:00:44.117465"
+      }
+    ],
+    "settings": {
+      "reminder_default": false,
+      "reminder_time": 3600,
+      "sort_by": "date",
+      "theme": "default",
+      "notification_level": "all",
+      "time_format": "24h",
+      "categories": [
+        "Work",
+        "Personal",
+        "Shopping",
+        "Health",
+        "Other"
+      ],
+      "language": "en"
+    },
+    "stats": {
+      "tasks_added": 1,
+      "tasks_completed": 1,
+      "last_active": "2025-03-29T14:00:08.807876",
+      "streaks": {
+        "current": 1,
+        "longest": 0,
+        "last_completion_date": "2025-03-29T14:00:08.807892"
+      }
     }
   }
 }

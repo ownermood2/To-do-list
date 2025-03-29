@@ -403,8 +403,40 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
         # Show time selection for reminder
         keyboard = get_time_selection_keyboard(task_index)
         
+        # Check if this is a group chat for friendlier message
+        is_group = update.effective_chat.type in ["group", "supergroup"]
+        
         query.edit_message_text(
-            f"⏰ Task added! Select when to be reminded:\n\n*{task_text}*",
+            f"⏰ Task added! When should I remind {'everyone' if is_group else 'you'} about:\n\n*{task_text}*",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif data.startswith("assign_group:"):
+        # Add a task specifically for the group (everyone)
+        task_text = data.split(":", 1)[1]
+        
+        # Check if we're actually in a group chat
+        is_group = update.effective_chat.type in ["group", "supergroup"]
+        if not is_group:
+            query.edit_message_text(
+                "⚠️ This option is only available in group chats.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        # Add the task to the database with group tag
+        task = add_task(chat_id, task_text, category="Group Task")
+        
+        # Find the task index in the active tasks list
+        tasks = get_tasks(chat_id)
+        task_index = next((i for i, t in enumerate(tasks) if t['text'] == task['text']), 0)
+        
+        # Show time selection for reminder
+        keyboard = get_time_selection_keyboard(task_index)
+        
+        query.edit_message_text(
+            f"👥 *Group Task Added!*\n\nWhen should I remind everyone about:\n*{task_text}*",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -516,12 +548,22 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
             task_text = tasks[task_index]['text']
             keyboard = get_time_selection_keyboard(task_index)
             
+            # Check if this is a group chat
+            is_group = update.effective_chat.type in ["group", "supergroup"]
+            
             query.edit_message_text(
-                f"Select when to be reminded about:\n\n*{task_text}*",
+                f"⏰ *When should I remind {'everyone' if is_group else 'you'} about:*\n\n*{task_text}*",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
             )
     
+    elif data == "cancel_reminder":
+        # User cancelled setting a reminder
+        query.edit_message_text(
+            "⏹️ Reminder setup cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
     elif data.startswith("time:"):
         # Set reminder with predefined time
         parts = data.split(":")
@@ -546,14 +588,118 @@ def button_callback_handler(update: Update, context: CallbackContext) -> None:
                     if mins > 0:
                         time_display += f" {mins} minute{'s' if mins != 1 else ''}"
                 
+                # Check if this is a group chat
+                is_group = update.effective_chat.type in ["group", "supergroup"]
+                mention = f"@all" if is_group else "you"
+                
                 query.edit_message_text(
-                    f"⏰ Reminder set for *{task_text}* in {time_display}",
+                    f"⏰ Reminder set! I'll remind {mention} about:\n*{task_text}*\nIn: {time_display}",
                     parse_mode=ParseMode.MARKDOWN
                 )
             else:
                 query.edit_message_text("❌ Task not found. It may have been deleted.")
         else:
             query.edit_message_text("❌ Failed to set reminder. Please try again.")
+            
+    elif data.startswith("special_time:"):
+        # Handle special timing options (end of day, weekend, next week)
+        parts = data.split(":")
+        task_index = int(parts[1])
+        time_option = int(parts[2])
+        
+        current_time = get_current_time()
+        reminder_time = current_time
+        time_display = ""
+        
+        # Calculate the appropriate reminder time based on special options
+        if time_option == 0:  # End of day
+            # Calculate time until 8:00 PM today
+            from datetime import datetime, timedelta
+            current_dt = datetime.fromtimestamp(current_time)
+            end_of_day = current_dt.replace(hour=20, minute=0, second=0)
+            
+            # If it's already past 8 PM, set for tomorrow
+            if current_dt.hour >= 20:
+                end_of_day = end_of_day + timedelta(days=1)
+                
+            reminder_time = end_of_day.timestamp()
+            time_display = "end of day (8:00 PM)"
+            
+        elif time_option == -1:  # Weekend
+            # Calculate time until Saturday 10:00 AM
+            from datetime import datetime, timedelta
+            current_dt = datetime.fromtimestamp(current_time)
+            days_until_saturday = (5 - current_dt.weekday()) % 7
+            
+            # If it's already Saturday or Sunday, set for next Saturday
+            if days_until_saturday == 0 and current_dt.hour >= 10:
+                days_until_saturday = 7
+            elif days_until_saturday < 0:
+                days_until_saturday += 7
+                
+            weekend = current_dt + timedelta(days=days_until_saturday)
+            weekend = weekend.replace(hour=10, minute=0, second=0)
+            
+            reminder_time = weekend.timestamp()
+            time_display = f"this weekend (Saturday, 10:00 AM)"
+            
+        elif time_option == -2:  # Next week
+            # Calculate time until Monday 9:00 AM
+            from datetime import datetime, timedelta
+            current_dt = datetime.fromtimestamp(current_time)
+            days_until_monday = (0 - current_dt.weekday()) % 7
+            
+            # If it's already Monday, set for next Monday
+            if days_until_monday == 0:
+                days_until_monday = 7
+                
+            next_week = current_dt + timedelta(days=days_until_monday)
+            next_week = next_week.replace(hour=9, minute=0, second=0)
+            
+            reminder_time = next_week.timestamp()
+            time_display = f"next week (Monday, 9:00 AM)"
+        
+        # Set the reminder with calculated time
+        if set_reminder(chat_id, task_index, reminder_time):
+            tasks = get_tasks(chat_id)
+            if 0 <= task_index < len(tasks):
+                task_text = tasks[task_index]['text']
+                
+                # Check if this is a group chat
+                is_group = update.effective_chat.type in ["group", "supergroup"]
+                mention = f"everyone in this group" if is_group else "you"
+                
+                query.edit_message_text(
+                    f"📅 *Special Reminder Set!*\n\nI'll remind {mention} about:\n*{task_text}*\n\nTime: {time_display}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                query.edit_message_text("❌ Task not found. It may have been deleted.")
+        else:
+            query.edit_message_text("❌ Failed to set reminder. Please try again.")
+            
+    elif data.startswith("custom_time:"):
+        # Handle custom time input request
+        task_index = int(data.split(":")[1])
+        tasks = get_tasks(chat_id)
+        
+        if 0 <= task_index < len(tasks):
+            task_text = tasks[task_index]['text']
+            
+            # Store the task index in user_data for the next step
+            if not context.user_data:
+                context.user_data = {}
+            context.user_data["custom_reminder_task"] = task_index
+            
+            query.edit_message_text(
+                f"⏰ *Custom Reminder*\n\nPlease reply with the time for your reminder for:\n*{task_text}*\n\n"
+                f"Examples:\n"
+                f"• `1h 30m` (1 hour and 30 minutes)\n"
+                f"• `tomorrow 9am` (tomorrow at 9:00 AM)\n"
+                f"• `friday 3pm` (next Friday at 3:00 PM)\n\n"
+                f"Type `cancel` to cancel.",
+                parse_mode=ParseMode.MARKDOWN
+            )
     
     # Priority handling
     elif data.startswith("priority:"):
@@ -1152,6 +1298,85 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     message_text = update.message.text.strip()
     
+    # Check if waiting for custom reminder time
+    if context.user_data and "custom_reminder_task" in context.user_data:
+        task_index = context.user_data["custom_reminder_task"]
+        
+        # Check for cancel
+        if message_text.lower() == "cancel":
+            update.message.reply_text(
+                "⏹️ Reminder setup cancelled.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            del context.user_data["custom_reminder_task"]
+            return
+        
+        # Try to parse the time string
+        try:
+            # First try using our helper function (handles relative time)
+            reminder_time = parse_time(message_text)
+            
+            if reminder_time:
+                # Successfully parsed the time
+                if set_reminder(chat_id, task_index, reminder_time):
+                    tasks = get_tasks(chat_id)
+                    if 0 <= task_index < len(tasks):
+                        task_text = tasks[task_index]['text']
+                        
+                        # Calculate time difference for display
+                        from datetime import datetime
+                        current_time = get_current_time()
+                        time_diff = reminder_time - current_time
+                        
+                        # Format for human-readable display
+                        if time_diff < 60*60:  # Less than 1 hour
+                            minutes = int(time_diff / 60)
+                            time_display = f"{minutes} minute{'s' if minutes != 1 else ''}"
+                        elif time_diff < 24*60*60:  # Less than 24 hours
+                            hours = int(time_diff / (60*60))
+                            time_display = f"{hours} hour{'s' if hours != 1 else ''}"
+                        else:  # More than 24 hours
+                            days = int(time_diff / (24*60*60))
+                            time_display = f"{days} day{'s' if days != 1 else ''}"
+                        
+                        # Include the actual time/date
+                        reminder_datetime = datetime.fromtimestamp(reminder_time)
+                        formatted_time = reminder_datetime.strftime("%a, %b %d at %I:%M %p")
+                        
+                        # Check if this is a group chat for friendlier message
+                        is_group = update.effective_chat.type in ["group", "supergroup"]
+                        mention = f"everyone in this group" if is_group else "you"
+                        
+                        update.message.reply_text(
+                            f"⏰ *Custom Reminder Set!*\n\nI'll remind {mention} about:\n*{task_text}*\n\n"
+                            f"📆 Time: {formatted_time}\n⏱️ ({time_display} from now)",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    else:
+                        update.message.reply_text("❌ Task not found. It may have been deleted.")
+                else:
+                    update.message.reply_text("❌ Failed to set reminder. Please try again.")
+            else:
+                # Could not parse the time string
+                update.message.reply_text(
+                    "⚠️ I couldn't understand that time format. Please try again with a format like:\n"
+                    "• `1h 30m` (1 hour and 30 minutes)\n"
+                    "• `tomorrow 9am` (tomorrow at 9:00 AM)\n"
+                    "• `friday 3pm` (next Friday at 3:00 PM)",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+        except Exception as e:
+            logger.error(f"Error parsing custom time: {e}")
+            update.message.reply_text(
+                "⚠️ I couldn't process that time format. Please try again with a simpler format like '1h 30m'.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        
+        # Clean up the user data
+        del context.user_data["custom_reminder_task"]
+        return
+    
     # Check if message contains a Telegram group invite link
     if 't.me/' in message_text:
         try:
@@ -1211,6 +1436,9 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
             )
             return
     
+    # Check if we're in a group chat
+    is_group = update.effective_chat.type in ["group", "supergroup"]
+    
     # Check if it looks like a task
     if len(message_text) > 3 and not message_text.startswith('/'):
         # Ask if user wants to add this as a task with smart buttons
@@ -1220,12 +1448,19 @@ def text_message_handler(update: Update, context: CallbackContext) -> None:
                 InlineKeyboardButton("❌ No", callback_data="cancel_add_task")
             ],
             [
-                InlineKeyboardButton("📅 Add with reminder", callback_data=f"add_task_reminder:{message_text[:200]}")
+                InlineKeyboardButton("⏰ Add with reminder", callback_data=f"add_task_reminder:{message_text[:200]}")
             ]
         ]
         
+        # In groups, add options to assign the task
+        if is_group:
+            keyboard.append([
+                InlineKeyboardButton("👥 Task for everyone", callback_data=f"assign_group:{message_text[:200]}")
+            ])
+        
         update.message.reply_text(
-            "📝 Did you want to add this as a new task?",
+            "📝 Did you want to add this as a new task?" if not is_group else 
+            "📝 Did you want to add this as a new group task?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
